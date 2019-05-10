@@ -151,6 +151,7 @@ class TrainSession:
         self.optimizer.step()
         return (loss, outputs)
 
+    @torch.no_grad()
     def evaluate(self, data):
         self.model.eval()
         loss = 0.0
@@ -159,7 +160,7 @@ class TrainSession:
         for inputs, labels in data:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
-            outputs = self.model(inputs).detach()
+            outputs = self.model(inputs)
             loss += self.lossfunc(outputs, labels).item() * inputs.size(0)
             accuracy += self.acc_func(outputs, labels).item()
             size += inputs.size(0)
