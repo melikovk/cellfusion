@@ -1,0 +1,12 @@
+# .gitignore
+__pycache__
+**/__pycache__
+models/
+runs/
+*.ipynb
+*.dat
+*.pdf
+*.svg
+.ipynb_checkouts/
+*.svm
+*.graph
