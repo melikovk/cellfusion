@@ -153,21 +153,32 @@ class YoloRandomDataset(Dataset):
             self.ys = np.random.randint(self.bsize, imgh-self.bsize-self.h, self.length)
 
 def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
+    """ Function to convert yolo type model output to bounding boxes
+    Parameters:
+        labels:     [batch_size:5:width:height] tensor of values
+                    2nd dimension stores [Pobj:Xcenter:Ycenter:W:H]
+                    all dimensions are normalized to grid_size
+        grid_size:  Size of the model grid
+        offset:     offset of the crop in the image for multicrop predictions
+        threshold:  Pobj threshold to use
+    Returns:
+        ([(Xlt,Ylt,W,H)], [Pobj]) all coordinates are int values in pixels
+    """
     if isinstance(offset, int):
         offx = offy = offset
     else:
         offx, offy = offset
-    _, w, h = labels.shape
+    _, wi, hi = labels.shape
     boxes = []
     scores = []
-    for x in range(w):
-        for y in range(h):
-            if labels[0, x, y] > threshold:
-                wbox, hbox = np.round(labels[3,x,y]*grid_size),np.round(labels[4,x,y]*grid_size)
-                xbox = np.round(x*grid_size + labels[1,x,y]*grid_size - (wbox-1)/2)
-                ybox = np.round(y*grid_size + labels[2,x,y]*grid_size - (hbox-1)/2)
-                boxes.append((offx+xbox, offy+ybox, wbox, hbox))
-                scores.append(labels[0,x,y])
+    for xi in range(wi):
+        for yi in range(hi):
+            if labels[0, xi, yi] > threshold:
+                w, h = labels[3,xi,yi]*grid_size, labels[4,xi,yi]*grid_size
+                x = xi*grid_size + labels[1,xi,yi]*grid_size - w/2
+                y = yi*grid_size + labels[2,xi,yi]*grid_size - h/2
+                boxes.append((offx+np.round(x), offy+np.round(y), np.round(w), np.round(h)))
+                scores.append(labels[0,xi,yi])
     return boxes, scores
 
 class randomIdx:
