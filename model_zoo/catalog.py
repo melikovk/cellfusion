@@ -20,7 +20,7 @@ def mobilenet_v2_1ch_object_detect_base():
     """
     features_params = _features_params.copy()
     head_params = _head_params.copy()
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(head_params))
+    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
     return model
 
 def mobilenet_v2_1ch_object_detect_full():

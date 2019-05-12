@@ -17,7 +17,7 @@ import argparse
 _MODEL_SELECTION = {'base': catalog.mobilenet_v2_1ch_object_detect_base,
                     'full': catalog.mobilenet_v2_1ch_object_detect_full,
                     'shrink': catalog.mobilenet_v2_1ch_object_detect_shrink,
-                    'deep': mobilenet_v2_1ch_object_detect_deep}
+                    'deep': catalog.mobilenet_v2_1ch_object_detect_deep}
 
 
 def imgToTensor(img):
@@ -77,22 +77,21 @@ if __name__ == "__main__":
     main_parser.add_argument('modeldir', help = 'File name prefix to save model and train session')
     main_parser.add_argument('logdir', help = 'Directory to log training progress')
     main_parser.add_argument('--gpu', type = int, default = 0, choices = range(torch.cuda.device_count()), help = 'GPU device to use')
-    main_parser.add_argument('--chanel', type = int, default = 'nuclei', choices = ['nuclei','phase'], help = 'Image chanel to use')
+    main_parser.add_argument('--chanel', default = 'nuclei', choices = ['nuclei','phase'], help = 'Image chanel to use')
     main_parser.add_argument('--init_lr', type = float, default = 0.01, help = 'Initial learning rate')
     main_parser.add_argument('--batch', type = int, default = 32, help = 'Batch size')
     main_parser.add_argument('--t_max', type = int, default = 20, help = 'Cycle length for scheduler')
     main_parser.add_argument('--lr_mult', type = float, default = 0.5, help = 'Factor to adjust learning rate for consecutive cycles')
     main_parser.add_argument('--n_cycles', type = int, default = 10, help = 'Number of cycles of training')
     main_args = main_parser.parse_args()
-    print(main_args)
-    # train_nucleus_mobilenet(modelchoice = main_args.model,
-    #                         datadir = main_args.datadir,
-    #                         modeldir = main_args.modeldir,
-    #                         logdir = main_args.logdir,
-    #                         device = f'cuda:{main_args.gpu}',
-    #                         chanel = main_args.chanel,
-    #                         init_lr = main_args.init_lr,
-    #                         batch = main_args.batch,
-    #                         t_max = main_args.t_max,
-    #                         lr_mult = main_args.lr_mult,
-    #                         n_cycles = main_args.n_cycles)
+    train_nucleus_mobilenet(modelchoice = main_args.model,
+                            datadir = main_args.datadir,
+                            modeldir = main_args.modeldir,
+                            logdir = main_args.logdir,
+                            device = f'cuda:{main_args.gpu}',
+                            chanel = main_args.chanel,
+                            init_lr = main_args.init_lr,
+                            batch = main_args.batch,
+                            t_max = main_args.t_max,
+                            lr_mult = main_args.lr_mult,
+                            n_cycles = main_args.n_cycles)
