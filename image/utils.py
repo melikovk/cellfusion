@@ -220,24 +220,26 @@ def getfusionCrops(fpaths: List, size: int, bsize: int)->Tuple:
     boxes, labels = zip(*[getCrops(path) for path in fpaths])
     return (np.concatenate(boxes), np.concatenate(labels))
 
-def centerinside(box:Rect, boxes, lt_anchor = True):
+def centerinside(box:Rect, boxes, lt_anchor = 'topleft'):
     """ Given a rectangular box and a list of rectangular boxes
         determines if centers of boxes in the list are inside
         the first box.
     Takes
         box: Rect(left: int, top: int, width: int, height: int)
         boxes: numpy array with dimensions num_of_boxes x 4 (left, top, width, height) or (center_x, center_y, width, height)
-        lt_anchor: determines if box anchor (first to values) is top left corner (True) or center of the box (False)
+        lt_anchor: determines if box anchor (first two values) is top left corner 'topleft' or center of the box 'center'
     Returns
         List[Bool]
     """
     x, y, w, h = box
-    if lt_anchor:
+    if lt_anchor == 'topleft':
         xs = boxes[:,0] + boxes[:,2]/2
         ys = boxes[:,1] + boxes[:,3]/2
-    else:
+    elif lt_anchor == 'center':
         xs = boxes[:,0]
         ys = boxes[:,1]
+    else:
+        raise ValueError("lt_anchor should be {'topleft'|'center'}")
     return np.all(np.stack((xs>=x, xs<x+w, ys>=y, ys<y+h)), axis=0)
 
 def iou(box:Rect, boxes):

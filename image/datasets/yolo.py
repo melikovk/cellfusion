@@ -128,7 +128,7 @@ class YoloRandomDataset(Dataset):
     def _getlabels(self, idx):
         x, y = self.xs[idx]/self.grid_size, self.ys[idx]/self.grid_size
         labels = np.zeros((5, self.w//self.grid_size, self.h//self.grid_size))
-        nucboxes = self.nucboxes[centerinside((x,y,self.w/self.grid_size, self.h/self.grid_size), self.nucboxes, lt_anchor=False)].reshape(-1,4)
+        nucboxes = self.nucboxes[centerinside((x,y,self.w/self.grid_size, self.h/self.grid_size), self.nucboxes, lt_anchor='center')].reshape(-1,4)
         nucboxes[:,0] = nucboxes[:,0] - x
         nucboxes[:,1] = nucboxes[:,1] - y
         for box in nucboxes:
