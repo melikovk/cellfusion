@@ -17,13 +17,14 @@ def class_accuracy(outputs, labels):
     _, preds = torch.max(outputs.detach(), 1)
     return torch.sum(preds == labels.detach())
 
+@torch.no_grad()
 def iou_accuracy(outputs, labels):
     """ Estimates intersection over union accuracy metrics
     This is simplified function as id does not perform non-maximal supression
     and will penalize if the wrong cell predicts correct bounding box
     """
-    X = outputs.detach()
-    Y = labels.detach()
+    X = outputs
+    Y = labels
     batch_size = X.size(0)
     count = torch.sum(torch.ge(X[:,0,:,:], 0.5))
     ileft = torch.max(X[:,1,:,:], Y[:,1,:,:])
@@ -34,6 +35,7 @@ def iou_accuracy(outputs, labels):
     iheights = torch.max(ibottom-itop, torch.zeros_like(itop))
     iareas = iwidths*iheights*torch.ge(X[:,0,:,:], 0.5).float()
     uareas = X[:,3,:,:]*X[:,4,:,:] + Y[:,3,:,:]*Y[:,4,:,:] - iareas
+    # We need to multiply by batch_size since this is an effective weight of the accuracy measurement
     return torch.sum(iareas/uareas)/count*batch_size if count.item() > 0 else torch.tensor(0)
 
 def predict_nuclei(image, model, grid_size = 32, conf_threshold = 0.5, iou_threshold = 0.8, offset= (0,0), transform = autocontrast):
