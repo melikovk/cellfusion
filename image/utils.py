@@ -8,6 +8,7 @@ import skimage.io as io
 import skimage.transform as transform
 import os.path
 from typing import List, Tuple, NewType
+import torch
 from torch.utils.data import Dataset
 from tensorflow.keras.utils import Sequence
 from skimage.exposure import adjust_gamma
@@ -259,6 +260,51 @@ def iou(box:Rect, boxes):
     iareas = iwidths*iheights
     uareas = width*height + boxes[:,2]*boxes[:,3] - iareas
     return iareas/uareas
+
+def iou_new(boxes1, boxes2):
+    """ Given 2 list of rectangular boxes
+        returns IOU (intersection over union) metric for interestion
+        of every box in the first list with every box in the second list
+        Lists should be in the form of n x 4 ndarray or torch tensor
+        where n is the number of boxes in the list and each box is represented
+        as left, top, width, height
+    Takes
+        boxes1: numpy array or torch tensor with dimensions
+                num_of_boxes x 4 (left, top, width, height)
+        boxes2: numpy array or torch tensor with dimensions
+                num_of_boxes x 4 (left, top, width, height)
+    Returns
+        iou: numpy array
+    """
+    # validate arguments
+    assert isinstance(boxes1, np.ndarray) or torch.is_tensor(boxes1), \
+        "first argument should be ndarray or pytorch Tensor"
+    assert isinstance(boxes2, type(boxes1)), \
+        "second argument should have the same type as the first"
+    assert len(boxes1.shape)<3 and len(boxes2.shape)<3, \
+        "Array or tensor should be 1D (length 4) or 2D (n x 4)"
+    assert boxes1.shape[-1] == 4 and boxes2.shape[-1] == 4, \
+        "Each box should have 4 coordinates: left, top, width, height"
+    # convert 1D to 2D and ndarray to Tensor
+    if len(boxes1.shape)==1:
+        boxes1 = boxes1.reshape((1,4))
+    if len(boxes2.shape)==1:
+        boxes2 = boxes2.reshape((1,4))
+    isndarray = isinstance(boxes1, np.ndarray)
+    if isndarray:
+        boxes1 = torch.from_numpy(boxes1)
+        boxes2 = torch.from_numpy(boxes2)
+    x1, y1, w1, h1 = boxes1.split(1, dim=1)
+    x2, y2, w2, h2 = boxes2.split(1, dim=1)
+    zero = torch.zeros(1, dtype = boxes1.dtype, device=boxes1.device)
+    iwidths = torch.max(torch.min(x1+w1, (x2+w2).t()) - torch.max(x1, x2.t()),zero)
+    iheights = torch.max(torch.min(y1+h1, (y2+h2).t()) - torch.max(y1, y2.t()) ,zero)
+    iareas = iwidths*iheights
+    uareas = w1*h1 + (w2*h2).t() - iareas
+    if isndarray:
+        return (iareas/uareas).numpy()
+    else:
+        return iareas/uareas
 
 def iofst(box:Rect, boxes:List[Rect])->List[float]:
     """ Given to rectangular boxe and a list of rectangular boxes
