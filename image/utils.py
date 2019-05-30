@@ -181,7 +181,7 @@ def getbkgCrops(fpaths: List, size: int, count=1000, threshold=.05)->Tuple:
     """
     def isgoodbox(arr):
         left, top = arr
-        return np.all(iofst((left,top,size,size), nucboxes)<threshold)
+        return np.all(iou(np.array([left,top,size,size]), nucboxes, denominator='first', keepdim=False)<threshold)
 
     cropImgs = []
     for path in fpaths:
@@ -243,25 +243,7 @@ def centerinside(box:Rect, boxes, lt_anchor = 'topleft'):
         raise ValueError("lt_anchor should be {'topleft'|'center'}")
     return np.all(np.stack((xs>=x, xs<x+w, ys>=y, ys<y+h)), axis=0)
 
-def iou(box:Rect, boxes):
-    """ Given a rectangular box and a list of rectangular boxes
-        returns IOU (intersection over union) metric for interestion
-        of the first box with every box in the list
-    Takes
-        box: Rect(left: int, top: int, width: int, height: int)
-        boxes: numpy array with dimensions num_of_boxes x 4 (left, top, width, height)
-    Returns
-        iou: numpy array
-    """
-    left, top, width, height = box
-    right, bottom = left + width, top + height
-    iwidths = np.maximum((np.minimum(boxes[:,0]+boxes[:,2], right) - np.maximum(boxes[:,0], left)),0)
-    iheights = np.maximum((np.minimum(boxes[:,1]+boxes[:,3], bottom) - np.maximum(boxes[:,1], top)),0)
-    iareas = iwidths*iheights
-    uareas = width*height + boxes[:,2]*boxes[:,3] - iareas
-    return iareas/uareas
-
-def iou_new(boxes1, boxes2):
+def iou(boxes1, boxes2, usegpu = False, gpu = 0, keepdim = False, denominator = 'union'):
     """ Given 2 list of rectangular boxes
         returns IOU (intersection over union) metric for interestion
         of every box in the first list with every box in the second list
@@ -273,10 +255,16 @@ def iou_new(boxes1, boxes2):
                 num_of_boxes x 4 (left, top, width, height)
         boxes2: numpy array or torch tensor with dimensions
                 num_of_boxes x 4 (left, top, width, height)
+        usegpu: True | False
+        gpu:    int - GPU device number to use
+        keepdim: True | False
+                if True result is always 2D
+        denominator: 'union' | 'first'
+                Calculate IOU or normalize to the area of the 1st box
     Returns
         iou: numpy array
     """
-    # validate arguments
+    # parse arguments
     assert isinstance(boxes1, np.ndarray) or torch.is_tensor(boxes1), \
         "first argument should be ndarray or pytorch Tensor"
     assert isinstance(boxes2, type(boxes1)), \
@@ -285,58 +273,38 @@ def iou_new(boxes1, boxes2):
         "Array or tensor should be 1D (length 4) or 2D (n x 4)"
     assert boxes1.shape[-1] == 4 and boxes2.shape[-1] == 4, \
         "Each box should have 4 coordinates: left, top, width, height"
+    assert denominator == 'union' or denominator == 'first', \
+        "denominator should have value {'union'|'first'}"
+    if usegpu:
+        assert gpu >= 0 and gpu < torch.cuda.device_count(), \
+            "Invalid GPU device number"
     # convert 1D to 2D and ndarray to Tensor
-    if len(boxes1.shape)==1:
-        boxes1 = boxes1.reshape((1,4))
-    if len(boxes2.shape)==1:
-        boxes2 = boxes2.reshape((1,4))
-    isndarray = isinstance(boxes1, np.ndarray)
-    if isndarray:
-        boxes1 = torch.from_numpy(boxes1)
-        boxes2 = torch.from_numpy(boxes2)
-    x1, y1, w1, h1 = boxes1.split(1, dim=1)
-    x2, y2, w2, h2 = boxes2.split(1, dim=1)
-    zero = torch.zeros(1, dtype = boxes1.dtype, device=boxes1.device)
+    b1, b2 = boxes1, boxes2
+    if len(b1.shape)==1:
+        b1 = b1.reshape((1,4))
+    if len(b2.shape)==1:
+        b2 = b2.reshape((1,4))
+    if isinstance(boxes1, np.ndarray):
+        b1 = torch.from_numpy(b1)
+        b2 = torch.from_numpy(b2)
+    if usegpu:
+        b1 = b1.cuda(gpu)
+        b2 = b2.cuda(gpu)
+    zero = torch.zeros(1, dtype = b1.dtype, device=b1.device)
+    # Calculate metric
+    x1, y1, w1, h1 = b1.split(1, dim=1)
+    x2, y2, w2, h2 = b2.split(1, dim=1)
     iwidths = torch.max(torch.min(x1+w1, (x2+w2).t()) - torch.max(x1, x2.t()),zero)
     iheights = torch.max(torch.min(y1+h1, (y2+h2).t()) - torch.max(y1, y2.t()) ,zero)
     iareas = iwidths*iheights
-    uareas = w1*h1 + (w2*h2).t() - iareas
-    if isndarray:
-        return (iareas/uareas).numpy()
+    if denominator == 'union':
+        denom = w1*h1 + (w2*h2).t() - iareas
     else:
-        return iareas/uareas
-
-def iofst(box:Rect, boxes:List[Rect])->List[float]:
-    """ Given to rectangular boxe and a list of rectangular boxes
-        returns area of intersection of first box with every box int the list
-        over the area of the first box
-    Takes
-        box: Rect(left: int, top: int, width: int, height: int)
-        boxes: List[Rect(left: int, top: int, width: int, height: int)]
-    Returns
-        iof: List[float]
-    """
-    left, top, width, height = box
-    right, bottom = left + width, top + height
-    iwidths = np.maximum((np.minimum(boxes[:,0]+boxes[:,2], right) - np.maximum(boxes[:,0], left)),0)
-    iheights = np.maximum((np.minimum(boxes[:,1]+boxes[:,3], bottom) - np.maximum(boxes[:,1], top)),0)
-    iareas = iwidths*iheights
-    return iareas/(width*height)
-
-def iosnd(box:Rect, boxes):
-    """ Given to rectangular boxe and a list of rectangular boxes
-        returns area of intersection of first box with every box int the list
-        over the area of the second box
-    Takes
-        box: Rect(left: int, top: int, width: int, height: int)
-        boxes: numpy array with dimensions num_of_boxes x 4 (left, top, width, height)
-    Returns
-        iof: numpy array
-    """
-    left, top, width, height = box
-    right, bottom = left + width, top + height
-    iwidths = np.maximum((np.minimum(boxes[:,0]+boxes[:,2], right) - np.maximum(boxes[:,0], left)),0)
-    iheights = np.maximum((np.minimum(boxes[:,1]+boxes[:,3], bottom) - np.maximum(boxes[:,1], top)),0)
-    iareas = iwidths*iheights
-    sndareas = boxes[:,-1]*boxes[:,-2]
-    return iareas/sndareas
+        denom = w1*h1
+    result = iareas/denom
+    if not keepdim:
+        result = result.squeeze()
+    if isinstance(boxes1, np.ndarray):
+        return result.cpu().numpy()
+    else:
+        return result.to(boxes1.device)

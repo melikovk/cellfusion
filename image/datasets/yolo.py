@@ -2,7 +2,7 @@ import json
 import numpy as np
 import skimage.io as io
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from ..utils import centerinside, iosnd
+from ..utils import centerinside, iou
 
 NUCLEUS = 0
 BKG = 1
@@ -56,9 +56,9 @@ class YoloGridDataset(Dataset):
         for x0 in range(bsize, self.img.shape[0]-bsize-self.w, stride[0]):
             for y0 in range(bsize, self.img.shape[1]-bsize-self.h, stride[1]):
                 window = (x0,y0,self.w, self.h)
-                skipoverlaps = iosnd(window, skipboxes)
+                skipoverlaps = iou(skipboxes, window, denominator='first', keepdim=False)
                 nucs = self.nucboxes[centerinside(window, self.nucboxes)]
-                if np.all(skipoverlaps <= ignore_thresh) and nucs.shape[0]>0 and np.all(iosnd(window, nucs)>=nuc_thresh):
+                if np.all(skipoverlaps <= ignore_thresh) and nucs.shape[0]>0 and np.all(iou(nucs, window, denominator='first', keepdim=False)>=nuc_thresh):
                     self.xs.append(x0)
                     self.ys.append(y0)
 
