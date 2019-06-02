@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from collections import OrderedDict
-# from image.utils import iou as iou_np
+from image.utils import iou
 import json
 
 NUCLEUS = 0
@@ -22,47 +22,8 @@ class CNNModel(nn.Module):
     def forward(self, x):
         return self.head(self.features(x))
 
-def iou(box, boxes):
-    """ Given a rectangular box and an array of rectangular boxes
-        returns IOU (intersection over union) metric for interestion
-        of the first box with every box in the list
-    Takes
-        box: Tensor
-        boxes: Tensor
-    Returns
-        iou: Tensor
-    """
-    left, top, width, height = box
-    right, bottom = left + width, top + height
-    zero = torch.tensor(0.0)
-    iwidths = torch.max((torch.min(boxes[:,0]+boxes[:,2], right) - torch.max(boxes[:,0], left)),zero)
-    iheights = torch.max((torch.min(boxes[:,1]+boxes[:,3], bottom) - torch.max(boxes[:,1], top)),zero)
-    iareas = iwidths*iheights
-    uareas = width*height + boxes[:,2]*boxes[:,3] - iareas
-    return iareas/uareas
-
-def nms(boxes, scores, iou_threshold):
-    """ Given an array of rectangular boxes and confidence scores filters out boxes that
-        overlap more than iou_threshold with boxes that higher score
-    Takes
-        boxes: Tensor
-        scores: Tensor
-        iou_threshold: float
-    Returns
-        keep_idx: Tensor
-    """
-    keep_idx = torch.ones_like(scores, dtype = torch.uint8)
-    order = torch.argsort(scores, descending=True)
-    for idx in order:
-        if keep_idx[idx].item() == 0:
-            continue
-        remove = ((iou(boxes[idx], boxes) > iou_threshold) & (scores <= scores[idx])).nonzero().squeeze()
-        keep_idx[remove] = 0
-        keep_idx[idx] = 1
-    return keep_idx.nonzero().squeeze()
-
 def saveboxes(fpath, boxes, scores):
-    """SSaves location bounding boxes to json file
+    """Saves location bounding boxes to json file
     """
     records = []
     for idx in range(boxes.size()[0]):

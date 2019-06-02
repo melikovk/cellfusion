@@ -7,7 +7,7 @@ from tensorboardX import SummaryWriter
 import skimage.io as io
 import numpy as np
 from image.datasets.yolo import labelsToBoxes
-from model_zoo.vision_models import nms
+from image.utils import nms
 from image.cv2transforms import AutoContrast, Gamma
 from skimage.transform import rescale
 
