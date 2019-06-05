@@ -309,6 +309,30 @@ def iou(boxes1, boxes2, usegpu = False, gpu = 0, keepdim = False, denominator = 
     else:
         return result.to(boxes1.device)
 
+def mean_iou_image(predict, target, scores=None):
+    """ Calculates average IOU per image for intersection between
+    predicted and target bounding boxes. All boxes are assumed to predict
+    same class of objects. Gready box assignement used. Each predicted
+    box can be assigned to only 1 target box (box with maximal IOU)
+    If more than one predicted boxes are assigned to the same target
+    box only the box with maximal prediction score is used (the other
+    prediction boxes will have IOU of 0). If scores are not given than
+    the prediction boxes should be sorted in ascending order of their
+    prediction confidence score values. If no prediction matches
+    the target box it will contribute 0 IOU to the mean)
+    Parameters:
+        predict: (n,4) Tensor of box predictions
+        target: (n, 4) Tensor of box targets
+        scores: (n,) Tensor of confidence scores for predictions
+    Returns:
+        mean_iou: (1,) Tensor with mean IOU
+    """
+    if torch.is_tensor(scores):
+        predict = predict.index_select(0, scores.argsort())
+    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
+    result = torch.zeros(target.shape[0], device=ious.device).index_put_((idxs,), ious)
+    return result.sum()/(predict.shape[0]+(result == 0).sum())
+
 def nms(boxes, scores, iou_threshold):
     """ Given an array of rectangular boxes and confidence scores filters out boxes that
         overlap more than iou_threshold with boxes that have higher score
