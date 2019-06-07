@@ -333,6 +333,35 @@ def mean_iou_image(predict, target, scores=None):
     result = torch.zeros(target.shape[0], device=ious.device).index_put_((idxs,), ious)
     return result.sum()/(predict.shape[0]+(result == 0).sum())
 
+def object_precision_recall(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+    """ Calculates precision and recall for object detection for
+    specified IOU threshold for intersection between predicted and target
+    bounding boxes. All boxes are assumed to predict same class of objects.
+    Gready box assignement used. Each predicted box can be assigned to only
+    1 target box (box with maximal IOU) If multiple predicted boxes
+    are assigned to the same target box only the box with maximal prediction
+    score is used (other prediction boxes will have IOU of 0). If scores are
+    not given than the prediction boxes should be sorted in ascending order
+    of their prediction confidence score values.
+    Parameters:
+        predict: (n,4) Tensor of box predictions
+        target: (n, 4) Tensor of box targets
+        iou_threshold: float IOU above which prediction is counted as positive
+        scores: (n,) Tensor of confidence scores for predictions
+        score_threshold: float Remove predicted boxes with score below the threshold
+    Returns:
+        (precision, recall, f1): ((1,), (1,), (1,)) Tuple of Tensors
+    """
+    if torch.is_tensor(scores):
+        n_score = torch.sum(scores > score_threshold, dtype=torch.long)
+        predict = predict.index_select(0, scores.argsort()[:n_score])
+    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
+    match_ious = torch.zeros(target.shape[0], device=ious.device).index_put_((idxs,),ious)
+    tp = torch.sum(match_ious > iou_threshold, dtype=torch.float)
+    precision = tp/predict.shape[0]
+    recall = tp/target.shape[0]
+    return (precision, recall)
+
 def nms(boxes, scores, iou_threshold):
     """ Given an array of rectangular boxes and confidence scores filters out boxes that
         overlap more than iou_threshold with boxes that have higher score
