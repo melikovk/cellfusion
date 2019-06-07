@@ -312,14 +312,11 @@ def iou(boxes1, boxes2, usegpu = False, gpu = 0, keepdim = False, denominator = 
 def mean_iou_image(predict, target, scores=None):
     """ Calculates average IOU per image for intersection between
     predicted and target bounding boxes. All boxes are assumed to predict
-    same class of objects. Gready box assignement used. Each predicted
-    box can be assigned to only 1 target box (box with maximal IOU)
-    If more than one predicted boxes are assigned to the same target
-    box only the box with maximal prediction score is used (the other
-    prediction boxes will have IOU of 0). If scores are not given than
-    the prediction boxes should be sorted in ascending order of their
-    prediction confidence score values. If no prediction matches
-    the target box it will contribute 0 IOU to the mean)
+    same class of objects. If scores are given than they will be used
+    to sort prediction boxes in ascending order of their prediction
+    confidence score. See documentation of match_boxes() function
+    on the deatils of the matching procedure. If no prediction matches
+    the target box it will contribute 0 IOU to the mean
     Parameters:
         predict: (n,4) Tensor of box predictions
         target: (n, 4) Tensor of box targets
@@ -328,21 +325,17 @@ def mean_iou_image(predict, target, scores=None):
         mean_iou: (1,) Tensor with mean IOU
     """
     if torch.is_tensor(scores):
-        predict = predict.index_select(0, scores.argsort())
-    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
-    result = torch.zeros(target.shape[0], device=ious.device).index_put_((idxs,), ious)
-    return result.sum()/(predict.shape[0]+(result == 0).sum())
+        predict = predict[scores.argsort()]
+    match_ious, _, _ = match_boxes(predict, target)
+    return match_ious.sum()/(predict.shape[0]+target.shape[0]-match_ious.shape[0])
 
 def object_precision_recall(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """ Calculates precision and recall for object detection for
     specified IOU threshold for intersection between predicted and target
     bounding boxes. All boxes are assumed to predict same class of objects.
-    Gready box assignement used. Each predicted box can be assigned to only
-    1 target box (box with maximal IOU) If multiple predicted boxes
-    are assigned to the same target box only the box with maximal prediction
-    score is used (other prediction boxes will have IOU of 0). If scores are
-    not given than the prediction boxes should be sorted in ascending order
-    of their prediction confidence score values.
+    If scores are given than they will be used to sort prediction boxes in
+    ascending order of their prediction confidence score. See documentation
+    of match_boxes() function on the deatils of the matching procedure.
     Parameters:
         predict: (n,4) Tensor of box predictions
         target: (n, 4) Tensor of box targets
@@ -354,13 +347,36 @@ def object_precision_recall(predict, target, iou_threshold = 0.5, scores = None,
     """
     if torch.is_tensor(scores):
         n_score = torch.sum(scores > score_threshold, dtype=torch.long)
-        predict = predict.index_select(0, scores.argsort()[:n_score])
-    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
-    match_ious = torch.zeros(target.shape[0], device=ious.device).index_put_((idxs,),ious)
+        predict = predict[scores.argsort()[:n_score]]
+    match_ious, _, _ = match_boxes(predict, target)
     tp = torch.sum(match_ious > iou_threshold, dtype=torch.float)
     precision = tp/predict.shape[0]
     recall = tp/target.shape[0]
-    return (precision, recall)
+    return precision, recall
+
+def match_boxes(predict, target):
+    """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
+    and indexes of matched boxes. Gready box assignement used.
+    Each predicted box can be assigned to only 1 target box (box with maximal IOU).
+    If multiple predicted boxes are assigned to the same target box
+    only the box with maximal prediction score is used (other prediction
+    boxes will have IOU of 0). The prediction boxes should be sorted
+    in ascending order of their prediction confidence score.
+    Parameters:
+        predict: (n,4) Tensor of box predictions
+        target: (n, 4) Tensor of box targets
+    Returns:
+        (ious, p_idxs, t_idxs): Tuple of tensors
+    """
+    dev = predict.device
+    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
+    match_ious = torch.zeros(target.shape[0], device=dev).index_put_((idxs,),ious)
+    p_idxs = -torch.ones(target.shape[0], dtype=torch.long, device=dev)
+    p_idxs.index_put_((idxs,),torch.arange(predict.shape[0], device=dev))
+    t_idxs = torch.arange(target.shape[0], device=dev)
+    matched = match_ious.nonzero().squeeze()
+    return match_ious[matched], p_idxs[matched], t_idxs[matched]
+
 
 def nms(boxes, scores, iou_threshold):
     """ Given an array of rectangular boxes and confidence scores filters out boxes that
