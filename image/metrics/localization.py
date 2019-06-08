@@ -129,7 +129,34 @@ def f1(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0)
 
 def jaccard_score(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """Refer to documentation on precision_recall_jaccard() function"""
-    return precision_recall(predict, target, iou_threshold, scores, score_threshold)[0]
+    return precision_recall(predict, target, iou_threshold, scores, score_threshold)[2]
+
+def average_precision(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+    """ Calculates average precision (area under precision vs recall curve)
+    for object detection given specified IOU threshold for intersection between
+    predicted and target bounding boxes. All boxes are assumed to predict
+    same class of objects. If scores are given than they will be used to sort
+    prediction boxes in ascending order of their prediction confidence score.
+    See documentation of match_boxes() function on the deatils of the matching procedure.
+    Parameters:
+        predict: (n,4) Tensor of box predictions
+        target: (n, 4) Tensor of box targets
+        iou_threshold: float IOU above which prediction is counted as positive
+        scores: (n,) Tensor of confidence scores for predictions
+        score_threshold: float Remove predicted boxes with score below the threshold
+    Returns:
+        ap: ((1,) Tensor
+    """
+    if torch.is_tensor(scores):
+        n_score = torch.sum(scores > score_threshold, dtype=torch.long)
+        predict = predict[scores.argsort()[:n_score]]
+    match_ious, p_idxs, _ = match_boxes(predict, target)
+    np, nt, dev = predict.shape[0], target.shape[0], predict.device
+    tp_boxes = torch.zeros(np, device=dev).index_put((p_idxs,), match_ious) > iou_threshold
+    precisions = tp_boxes.cumsum(dim=0,dtype=torch.float) / torch.arange(1, np+1, device=dev, dtype=torch.float)
+    print(precisions)
+    ap = precisions[tp_boxes].sum() / nt
+    return ap
 
 def match_boxes(predict, target):
     """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
@@ -147,9 +174,9 @@ def match_boxes(predict, target):
     """
     dev = predict.device
     ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
-    match_ious = torch.zeros(target.shape[0], device=dev).index_put_((idxs,),ious)
+    match_ious = torch.zeros(target.shape[0], device=dev).index_put((idxs,),ious)
     p_idxs = -torch.ones(target.shape[0], dtype=torch.long, device=dev)
-    p_idxs.index_put_((idxs,),torch.arange(predict.shape[0], device=dev))
+    p_idxs = p_idxs.index_put((idxs,),torch.arange(predict.shape[0], device=dev))
     t_idxs = torch.arange(target.shape[0], device=dev)
     matched = match_ious.nonzero().squeeze()
     return match_ious[matched], p_idxs[matched], t_idxs[matched]
