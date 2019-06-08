@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from collections import OrderedDict
-from image.utils import iou
+from image.metrics.localization import iou
 import json
 
 NUCLEUS = 0

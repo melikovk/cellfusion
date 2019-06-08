@@ -2,7 +2,8 @@ import json
 import numpy as np
 import skimage.io as io
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from ..utils import centerinside, iou
+from ..utils import centerinside
+from ..metrics.localization import iou
 
 NUCLEUS = 0
 BKG = 1
