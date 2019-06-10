@@ -43,12 +43,12 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                                         imgToTensor])
     trainDataset = ConcatDataset([YoloRandomDataset(*names,
                                         winsize = (224, 224),
-                                        bsize = batch,
+                                        bsize = 32,
                                         length = 500,
                                         transforms = yolo_transforms) for names in train_names])
     validDataset = ConcatDataset([YoloRandomDataset(*names,
                                         winsize=(224, 224),
-                                        bsize = batch,
+                                        bsize = 32,
                                         length = 500,
                                         transforms = yolo_transforms) for names in test_names])
     model = _MODEL_SELECTION[modelchoice]()
@@ -64,7 +64,7 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                            saver = SessionSaver(modeldir),
                            device = torch.device(device))
     image_datasets = {'train': trainDataset, 'val': validDataset}
-    dataloaders = {x: RandomLoader(image_datasets[x], batch_size=64, shuffle=True, num_workers=2) for x in ['train', 'val']}
+    dataloaders = {x: RandomLoader(image_datasets[x], batch_size=batch, shuffle=True, num_workers=2) for x in ['train', 'val']}
     # session.train(dataloaders['train'], dataloaders['val'], 3)
     for i in range(n_cycles):
         session.train(dataloaders['train'], dataloaders['val'], t_max)

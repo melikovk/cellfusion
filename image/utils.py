@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import Dataset
 from tensorflow.keras.utils import Sequence
 from skimage.exposure import adjust_gamma
-from metrics.localization import iou
+from .metrics.localization import iou
 
 NUCLEUS = 0
 BKG = 1
