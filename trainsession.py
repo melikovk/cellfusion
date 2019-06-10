@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 from tqdm.auto import tqdm
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from tensorboardX import SummaryWriter
 import skimage.io as io
 import numpy as np
@@ -128,7 +128,25 @@ class SessionSaver:
 
 
 class TrainSession:
-
+    """ Class to train and save pytorch models
+    Parameters:
+        model: pyTorch model
+        lossfunc: function to calculate loss. Should return dict of the form
+                  {'loss': total_loss, 'loss_name1': loss1, ...}.
+                  Total loss will be optimized.
+        optimizer: pyTorch Optimizer to use for optimization
+        parameters: iterable with model parameters or dict objects to optimize
+                    refer to specific Optimizer documentation for details
+        acc_func: function to report model accuracy metric should return a dict
+                  of the form {'metrics_name':metric, ...}
+        opt_defaults: dict with the default parameters of the optimizer
+                      refer to specific Optimizer documentation
+        scheduler: learning rate scheduler
+        scheduler_params: parameters of the scheduler
+        log_dir: Directory to log training progress
+        saver: SessionSaver object to save the training session during training
+        device: device on which to perform training
+    """
     def __init__(self, model, lossfunc, optimizer, parameters, acc_func, opt_defaults = None,
                  scheduler=None, scheduler_params=None, log_dir=None, saver=None, device = None):
         if device is None:
@@ -149,24 +167,28 @@ class TrainSession:
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.lossfunc(outputs, labels)
-        loss.backward()
+        loss['loss'].backward()
         self.optimizer.step()
         return (loss, outputs)
 
     @torch.no_grad()
     def evaluate(self, data):
         self.model.eval()
-        loss = 0.0
+        loss = defaultdict(lambda:0.0)
         size = 0
         accuracy = 0.0
         for inputs, labels in data:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
             outputs = self.model(inputs)
-            loss += self.lossfunc(outputs, labels).item() * inputs.size(0)
+            batch_loss = self.lossfunc(outputs, labels)
+            for k, v in batch_loss.items():
+                loss[k] += v.item() * inputs.size(0)
             accuracy += self.acc_func(outputs, labels).item()
             size += inputs.size(0)
-        return (loss/size, accuracy/size)
+        for k, v in loss.items():
+            loss[k] = loss[k]/size
+        return (loss, accuracy/size)
 
     def train(self, train_data, valid_data, epochs = None):
         if epochs is None:
@@ -177,9 +199,9 @@ class TrainSession:
             self.epoch += 1
             self.epochs_left = epochs-epoch-1
             self.model.train()
-            loss = 0.0
+            train_loss = defaultdict(lambda:0.0)
             size = 0
-            accuracy = 0.0
+            train_acc = 0.0
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
@@ -188,26 +210,31 @@ class TrainSession:
                 labels = labels.to(self.device)
                 batch_loss, outputs = self.train_step(inputs, labels)
                 # statistics
-                loss += batch_loss.item() * inputs.size(0)
-                accuracy += self.acc_func(outputs, labels).item()
+                for k, v in batch_loss.items():
+                    train_loss[k] += v.item() * inputs.size(0)
+                train_acc += self.acc_func(outputs, labels).item()
                 size += inputs.size(0)
                 pbar.update(1)
-            train_loss = loss / size
-            train_acc = accuracy / size
+            for k, v in train_loss.items():
+                train_loss[k] = train_loss[k]/size
+            train_acc = train_acc / size
             valid_loss, valid_acc = self.evaluate(valid_data)
             message = (f'Epoch {epoch+1} of {epochs} took {tqdm.format_interval(pbar.last_print_t-pbar.start_t)}\n'
-                       f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}\n'
-                       f'Validation Loss: {valid_loss:.4f}, Validation Acc: {valid_acc:.4f}')
+                       f'Train Loss: {train_loss["loss"]:.4f}, Train Acc: {train_acc:.4f}\n'
+                       f'Validation Loss: {valid_loss["loss"]:.4f}, Validation Acc: {valid_acc:.4f}')
             tqdm.write(message)
             if self.log_dir:
-                metrics = {'loss/train': train_loss,
-                           'loss/validation': valid_loss,
-                           'accuracy/train': train_acc,
-                           'accuracy/validation': valid_acc}
+                metrics = {}
+                for k, v in train_loss.items():
+                    metrics[k+'/train'] = v
+                for k, v in valid_loss.items():
+                    metrics[k+'/validation'] = v
+                metrics['accuracy/train'] = train_acc
+                metrics['accuracy/validation'] = valid_acc
                 for metric, value in metrics.items():
                     writer.add_scalar(metric, value, self.epoch)
             if self.saver:
-                self.saver.save(self, self.epoch, {'loss':valid_loss, 'accuracy':valid_acc})
+                self.saver.save(self, self.epoch, {'loss':valid_loss['loss'], 'accuracy':valid_acc})
             pbar.close()
 
     def update_lr(self, factor):

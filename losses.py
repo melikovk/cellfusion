@@ -10,7 +10,7 @@ def yolo_loss(predict, target, reduction='mean'):
         loss = (loss_conf+loss_box)/target.shape[0]
     else:
         loss = (loss_conf+loss_box)
-    return loss
+    return {'loss': loss}
 
 def object_detection_loss(predict, target, reduction='mean', confidence_loss = 'crossentropy',
     confidence_output = 'logits', size_transform = 'log', localization_weight = 1):
@@ -59,11 +59,11 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     elif reduction != 'sum':
         raise ValueError("reduction should be 'mean' or 'sum'")
     loss = loss_conf + localization_weight*loss_box
-    return (loss, {'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box})
+    return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box}
 
 def yolo1_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'mse',
-        confidence_output = 'logits', size_transform = 'sqrt', localization_weight = localization_weight)
+        confidence_output = 'probability', size_transform = 'none', localization_weight = localization_weight)
 
 def yolo2_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'crossentropy',
