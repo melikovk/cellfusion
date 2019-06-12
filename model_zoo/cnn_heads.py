@@ -59,12 +59,24 @@ class ObjectDetectionHead(nn.Module):
         hidden_kernel: [int] - size of kernel for Conv2d layers
         bn_arg: dict - BatchNorm2d parameters
         act_args: dict - Activation layers parameters
+        probability: {False | True} Return probability instead of logits (default is False)
+        coordinate_transform: {hardtanh|sigmoid} transformation of box coordinate
     Ouputs:
         5xHxWxB tensor of predictions
     """
-    def __init__(self, in_features, activation='relu', hidden_features=[1024, 1024], hidden_kernel=[3, 3], bn_args={'momentum':0.01}, act_args={}):
-        assert len(hidden_features) == len(hidden_kernel), "You should provide kernel_size for each hidden convolutional layer"
+    def __init__(self, in_features, activation='relu', hidden_features=[1024, 1024],
+                 hidden_kernel=[3, 3], bn_args={'momentum':0.01}, act_args={},
+                 probability=False, coordinate_transform = 'hardtanh'):
+        assert len(hidden_features) == len(hidden_kernel), \
+            "You should provide kernel_size for each hidden convolutional layer"
+        assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
+            "coordinate_transform should be 'hardtanh' or 'sigmoid'"
         super().__init__()
+        self.conf_func = F.sigmoid if probability else lambda x: x
+        if coordinate_transform == 'hardtanh':
+            self.coord_func = lambda x: F.hardtanh(x, min_val=0., max_val=1.)
+        else:
+            self.coord_func = F.sigmoid
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
         self.activ0 = _activation[activation](**act_args)
         hidden_features = [in_features] + hidden_features
@@ -77,7 +89,7 @@ class ObjectDetectionHead(nn.Module):
     def forward(self, x):
         for m in list(self.children()):
             x = m(x)
-        x = torch.cat([torch.sigmoid(x[:,:3,:,:]),x[:,-2:,:,:]], dim = 1)
+        x = torch.cat([self.conf_func(x[:,:1,:,:]),self.coord_func(x[:,1:3,:,:]),torch.max(x[:,3:,:,:], torch.tensor(1e-5).to(x.device))], dim = 1)
         return x
 
 
