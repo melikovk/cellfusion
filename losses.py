@@ -29,6 +29,7 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     Returns:
         (total_loss, {'confidence_loss':confidence_loss, 'localization_loss':localization_loss})
     """
+    eps = torch.tensor(1e-5).to(target.device)
     if confidence_output == 'logits':
         if confidence_loss == 'crossentropy':
             loss_conf = F.binary_cross_entropy_with_logits(predict[:,0,:,:], target[:,0,:,:], reduction='sum')
@@ -47,7 +48,7 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
         raise ValueError("confidence_output should be 'logits' or 'probability'")
     loss_box = F.mse_loss(predict[:,1:3,:,:]*target[:,0:1,:,:], target[:,1:3,:,:]*target[:,0:1,:,:], reduction='sum')
     if size_transform == 'log':
-        loss_box += F.mse_loss(predict[:,3:,:,:].log()*target[:,0:1,:,:], target[:,3:,:,:].log()*target[:,0:1,:,:], reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,:,:].log()*target[:,0:1,:,:], target[:,3:,:,:].max(eps).log()*target[:,0:1,:,:], reduction='sum')
     elif size_transform == 'sqrt':
         loss_box += F.mse_loss(predict[:,3:,:,:].sqrt()*target[:,0:1,:,:], target[:,3:,:,:].sqrt()*target[:,0:1,:,:], reduction='sum')
     elif size_transform == 'none':
@@ -63,7 +64,7 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
 
 def yolo1_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'mse',
-        confidence_output = 'probability', size_transform = 'none', localization_weight = localization_weight)
+        confidence_output = 'logits', size_transform = 'none', localization_weight = localization_weight)
 
 def yolo2_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'crossentropy',
