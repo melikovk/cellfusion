@@ -4,6 +4,7 @@ import skimage.io as io
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from ..utils import centerinside
 from ..metrics.localization import iou
+import torch
 
 NUCLEUS = 0
 BKG = 1
@@ -153,37 +154,69 @@ class YoloRandomDataset(Dataset):
             self.xs = np.random.randint(self.bsize, imgw-self.bsize-self.w, self.length)
             self.ys = np.random.randint(self.bsize, imgh-self.bsize-self.h, self.length)
 
-def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
-    """ Function to convert yolo type model output to bounding boxes
-    Parameters:
-        labels:     [batch_size:5:width:height] tensor of values
-                    2nd dimension stores [Pobj:Xcenter:Ycenter:W:H]
-                    all dimensions are normalized to grid_size
-        grid_size:  Size of the model grid
-        offset:     offset of the crop in the image for multicrop predictions
-        threshold:  Pobj threshold to use
-    Returns:
-        ([(Xlt,Ylt,W,H)], [Pobj]) all coordinates are int values in pixels
-    """
-    if isinstance(offset, int):
-        offx = offy = offset
-    else:
-        offx, offy = offset
-    _, wi, hi = labels.shape
-    boxes = []
-    scores = []
-    for xi in range(wi):
-        for yi in range(hi):
-            if labels[0, xi, yi] > threshold:
-                w, h = labels[3,xi,yi]*grid_size, labels[4,xi,yi]*grid_size
-                x = xi*grid_size + labels[1,xi,yi]*grid_size - w/2
-                y = yi*grid_size + labels[2,xi,yi]*grid_size - h/2
-                boxes.append((offx+np.round(x), offy+np.round(y), np.round(w), np.round(h)))
-                scores.append(labels[0,xi,yi])
-    return boxes, scores
+    @staticmethod
+    def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
+        """ Function to convert yolo type model output to bounding boxes
+        Parameters:
+            labels:     [5:width:height] numpy array of predictions
+                        1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
+                        all dimensions are normalized to grid_size
+            grid_size:  Size of the model grid
+            offset:     offset of the crop in the image for multicrop predictions (in pixels)
+            threshold:  Pobj threshold to use
+        Returns:
+            (Tensor(Xlt,Ylt,W,H), Tensor(Pobj)) all coordinates are float values in pixels
+        """
+        if isinstance(offset, int):
+            offx = offy = offset
+        else:
+            offx, offy = offset
+        _, wi, hi = labels.shape
+        boxes = labels[1:].copy()
+        scores = labels[0].copy()
+        boxes[0] += np.arange(0, wi).reshape(-1,1) - boxes[2]/2
+        boxes[1] += np.arange(0, hi).reshape(1,-1) - boxes[3]/2
+        boxes = boxes*grid_size
+        boxes[0] += offx
+        boxes[1] += offy
+        boxes = boxes.reshape((4,-1)).T
+        scores = scores.reshape((1, -1)).squeeze()
+        idx = (scores > threshold).nonzero()[0]
+        return boxes[idx], scores[idx]
+
+labelsToBoxes = YoloRandomDataset.labelsToBoxes
+
+# @torch.no_grad()
+# def labelsToBoxes_torch(labels, grid_size=32, offset=(0,0), threshold = 0.5):
+#     """ Function to convert yolo type model output to bounding boxes
+#     Parameters:
+#         labels:     [5:width:height] tensor of values
+#                     1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
+#                     all dimensions are normalized to grid_size
+#         grid_size:  Size of the model grid
+#         offset:     offset of the crop in the image for multicrop predictions (in pixels)
+#         threshold:  Pobj threshold to use
+#     Returns:
+#         (Tensor(Xlt,Ylt,W,H), Tensor(Pobj)) all coordinates are float values in pixels
+#     """
+#     if isinstance(offset, int):
+#         offx = offy = offset
+#     else:
+#         offx, offy = offset
+#     wi, hi = labels.shape[-2:]
+#     boxes = labels[:,1:].clone().detach()
+#     scores = labels[:,0].clone().detach()
+#     boxes[:,0] += torch.arange(0, wi, dtype=torch.float, device = boxes.device).unsqueeze(1) - boxes[:,2]/2
+#     boxes[:,1] += torch.arange(0, hi, dtype=torch.float, device = boxes.device).unsqueeze(0) - boxes[:,3]/2
+#     boxes *= grid_size
+#     boxes[:,0] += offx
+#     boxes[:,1] += offy
+#     # boxes = boxes.view(4,-1).t()
+#     # scores = scores.view(1, -1).squeeze()
+#     # idx = (scores > threshold).nonzero().squeeze()
+#     return boxes, scores
 
 class randomIdx:
-
     def __init__(self, low, high):
         self.low = low
         self.high = high
