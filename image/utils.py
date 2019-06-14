@@ -3,15 +3,15 @@ import glob
 import numpy as np
 import cv2
 import skimage
-from matplotlib import pyplot as plt
 import skimage.io as io
 import skimage.transform as transform
+from skimage.exposure import adjust_gamma
+from matplotlib import pyplot as plt
 import os.path
 from typing import List, Tuple, NewType
 import torch
 from torch.utils.data import Dataset
-from tensorflow.keras.utils import Sequence
-from skimage.exposure import adjust_gamma
+# from tensorflow.keras.utils import Sequence
 from .metrics.localization import iou
 
 NUCLEUS = 0

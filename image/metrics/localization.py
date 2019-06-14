@@ -1,73 +1,109 @@
 import numpy as np
 import torch
 
-def iou(boxes1, boxes2, usegpu = False, gpu = 0, keepdim = False, denominator = 'union'):
-    """ Given 2 list of rectangular boxes
-        returns IOU (intersection over union) metric for interestion
-        of every box in the first list with every box in the second list
-        Lists should be in the form of n x 4 ndarray or torch tensor
-        where n is the number of boxes in the list and each box is represented
-        as left, top, width, height
-    Takes
-        boxes1: numpy array or torch tensor with dimensions
-                num_of_boxes x 4 (left, top, width, height)
-        boxes2: numpy array or torch tensor with dimensions
-                num_of_boxes x 4 (left, top, width, height)
-        usegpu: True | False
-        gpu:    int - GPU device number to use
-        keepdim: True | False
-                if True result is always 2D
-        denominator: 'union' | 'first'
-                Calculate IOU or normalize to the area of the 1st box
-    Returns
-        iou: numpy array
-    """
-    # parse arguments
+def _check_box_args(boxes1, boxes2):
     assert isinstance(boxes1, np.ndarray) or torch.is_tensor(boxes1), \
-        "first argument should be ndarray or pytorch Tensor"
+        "first argument should be ndarray or Tensor"
     assert isinstance(boxes2, type(boxes1)), \
         "second argument should have the same type as the first"
     assert len(boxes1.shape)<3 and len(boxes2.shape)<3, \
-        "Array or tensor should be 1D (length 4) or 2D (n x 4)"
+        "ndarray or Tensor should be 1D (length 4) or 2D (n x 4)"
     assert boxes1.shape[-1] == 4 and boxes2.shape[-1] == 4, \
         "Each box should have 4 coordinates: left, top, width, height"
-    assert denominator == 'union' or denominator == 'first', \
-        "denominator should have value {'union'|'first'}"
-    if usegpu:
-        assert gpu >= 0 and gpu < torch.cuda.device_count(), \
-            "Invalid GPU device number"
-    # convert 1D to 2D and ndarray to Tensor
     b1, b2 = boxes1, boxes2
     if len(b1.shape)==1:
         b1 = b1.reshape((1,4))
     if len(b2.shape)==1:
         b2 = b2.reshape((1,4))
-    if isinstance(boxes1, np.ndarray):
-        b1 = torch.from_numpy(b1)
-        b2 = torch.from_numpy(b2)
-    if usegpu:
-        b1 = b1.cuda(gpu)
-        b2 = b2.cuda(gpu)
-    zero = torch.zeros(1, dtype = b1.dtype, device=b1.device)
-    # Calculate metric
-    x1, y1, w1, h1 = b1.split(1, dim=1)
-    x2, y2, w2, h2 = b2.split(1, dim=1)
-    iwidths = torch.max(torch.min(x1+w1, (x2+w2).t()) - torch.max(x1, x2.t()),zero)
-    iheights = torch.max(torch.min(y1+h1, (y2+h2).t()) - torch.max(y1, y2.t()) ,zero)
+    return b1, b2
+
+def iou(boxes1, boxes2, denominator = 'union'):
+    """ Given 2 list of rectangular boxes returns IOU (intersection over union) or
+        IOF (area of intersection over area of the first box) metric for
+        every box in the first list with every box in the second list.
+        Lists should be in the form of (n, 4) Tensor or ndarray where n is
+        the number of boxes in the list and each box is represented as
+        [left, top, width, height]
+    Takes
+        boxes1: ndarray or Tensor with dimensions (n1, 4)
+                (left, top, width, height)
+        boxes2: ndarray or Tensor with dimensions (n1, 4)
+                (left, top, width, height)
+        denominator: 'union' | 'first'
+                Calculate IOU or normalize to the area of the 1st box
+    Returns
+        iou: (n1, n2) ndarray or Tensor
+    """
+    # Parse arguments
+    b1, b2 = _check_box_args(boxes1, boxes2)
+    assert denominator == 'union' or denominator == 'first', \
+        "denominator should have value {'union'|'first'}"
+    # Calculate Metric
+    if isinstance(b1, np.ndarray):
+        return iou_numpy(b1, b2, denominator)
+    else:
+        return iou_torch(b1, b2, denominator)
+
+def iou_torch(boxes1, boxes2, denominator = 'union'):
+    """ Given 2 list of rectangular boxes returns IOU (intersection over union) or
+        IOF (area of intersection over area of the first box) metric for
+        every box in the first list with every box in the second list.
+        Lists should be in the form of (n, 4) Tensor where n is the number
+        of boxes in the list and each box is represented as
+        [left, top, width, height]
+    Takes
+        boxes1: Tensor with dimensions (n1, 4)
+                (left, top, width, height)
+        boxes2: Tensor with dimensions (n2, 4)
+                (left, top, width, height)
+        denominator: 'union' | 'first'
+                Calculate IOU or normalize to the area of the 1st box
+    Returns
+        iou: (n1, n2) Tensor
+    """
+    zero = torch.zeros(1, dtype = boxes1.dtype, device=boxes1.device)
+    x1, y1, w1, h1 = boxes1.split(1, dim=1)
+    x2, y2, w2, h2 = boxes2.split(1, dim=1)
+    # print(x1.shape)
+    iwidths = torch.max(torch.min(x1+w1, (x2+w2).t()) - torch.max(x1, x2.t()), zero)
+    iheights = torch.max(torch.min(y1+h1, (y2+h2).t()) - torch.max(y1, y2.t()), zero)
     iareas = iwidths*iheights
     if denominator == 'union':
         denom = w1*h1 + (w2*h2).t() - iareas
     else:
         denom = w1*h1
-    result = iareas/denom
-    if not keepdim:
-        result = result.squeeze()
-    if isinstance(boxes1, np.ndarray):
-        return result.cpu().numpy()
-    else:
-        return result.to(boxes1.device)
+    return iareas/denom
 
-def mean_iou_image(predict, target, scores=None):
+def iou_numpy(boxes1, boxes2, denominator = 'union'):
+    """ Given 2 list of rectangular boxes returns IOU (intersection over union) or
+        IOF (area of intersection over area of the first box) metric for
+        every box in the first list with every box in the second list.
+        Lists should be in the form of n x 4 ndarray where n is the number
+        of boxes in the list and each box is represented as
+        [left, top, width, height]
+    Takes
+        boxes1: ndarray with dimensions (n1, 4)
+                (left, top, width, height)
+        boxes2: ndarray with dimensions (n2, 4)
+                (left, top, width, height)
+        denominator: 'union' | 'first'
+                Calculate IOU or normalize to the area of the 1st box
+    Returns
+        iou: (n1, n2) ndarray
+    """
+    x1, y1, w1, h1 = np.split(boxes1, 4, axis=1)
+    x2, y2, w2, h2 = np.split(boxes2, 4, axis=1)
+    # print(x1.T.shape)
+    iwidths = np.maximum(np.minimum(x1+w1, (x2+w2).T) - np.maximum(x1, x2.T), 0)
+    iheights = np.maximum(np.minimum(y1+h1, (y2+h2).T) - np.maximum(y1, y2.T), 0)
+    iareas = iwidths*iheights
+    if denominator == 'union':
+        denom = w1*h1 + (w2*h2).T - iareas
+    else:
+        denom = w1*h1
+    return iareas/denom
+
+def mean_iou_img(predict, target, scores=None):
     """ Calculates average IOU per image for intersection between
     predicted and target bounding boxes. All boxes are assumed to predict
     same class of objects. If scores are given than they will be used
@@ -76,18 +112,57 @@ def mean_iou_image(predict, target, scores=None):
     on the deatils of the matching procedure. If no prediction matches
     the target box it will contribute 0 IOU to the mean
     Parameters:
-        predict: (n,4) Tensor of box predictions
-        target: (n, 4) Tensor of box targets
-        scores: (n,) Tensor of confidence scores for predictions
+        predict: (n,4) ndarray or Tensor of box predictions
+        target: (n, 4) ndarray or Tensor of box targets
+        scores: (n,) ndarray or Tensor of confidence scores for predictions
     Returns:
-        mean_iou: (1,) Tensor with mean IOU
+        mean_iou: (1,) Tensor with mean IOU or float IOU
     """
-    if torch.is_tensor(scores):
-        predict = predict[scores.argsort()]
-    match_ious, _, _ = match_boxes(predict, target)
-    return match_ious.sum()/(predict.shape[0]+target.shape[0]-match_ious.shape[0])
+    # Parse arguments
+    p, t = _check_box_args(predict, target)
+    if scores is not None:
+        assert isinstance(scores, type(p)), \
+            "If provided scores should have the same type as predict and target (ndarray or Tensor)"
+        p = p[scores.argsort()]
+    if torch.is_tensor(p):
+        match_ious, _, _ = match_boxes_torch(p, t)
+    else:
+        match_ious, _, _ = match_boxes_numpy(p, t)
+    return match_ious.sum()/(p.shape[0]+t.shape[0]-match_ious.shape[0])
 
-def precision_recall_jaccard(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+def tp_fp_fn_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+    """ Calculates True Positive, False Positive and False Negative boxes
+    for object detection given specified IOU threshold for intersection between
+    predicted and target bounding boxes. All boxes are assumed to predict same
+    class of objects. If scores are given than they will be used to sort
+    prediction boxes in ascending order of their prediction confidence score.
+    See documentation of match_boxes() function on the deatils of the matching procedure.
+    Parameters:
+        predict: (n,4) ndarray or Tensor of box predictions
+        target: (n, 4) ndarray or Tensor of box targets
+        iou_threshold: float IOU above which prediction is counted as positive
+        scores: (n,) ndarray or Tensor of confidence scores for predictions
+        score_threshold: float Remove predicted boxes with score below the threshold
+                         Ignored if scores are not provided
+    Returns:
+        (precision, recall, f1): ((1,), (1,), (1,)) Tuple of Tensors or floats
+    """
+    p, t = _check_box_args(predict, target)
+    if scores is not None:
+        assert isinstance(scores, type(p)), \
+            "If provided scores should have the same type as predict and target (ndarray or Tensor)"
+        n_score = (scores > score_threshold).sum()
+        p = p[scores.argsort()[:n_score]]
+    if torch.is_tensor(p):
+        match_ious, _, _ = match_boxes_torch(p, t)
+    else:
+        match_ious, _, _ = match_boxes_numpy(p, t)
+    tp = (match_ious > iou_threshold).sum()
+    fp = p.shape[0] - tp
+    fn = recall = t.shape[0] - tp
+    return tp, fp, fn
+
+def precision_recall_jaccard_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """ Calculates precision, recall and Jaccard score for object detection given
     specified IOU threshold for intersection between predicted and target
     bounding boxes. All boxes are assumed to predict same class of objects.
@@ -95,43 +170,52 @@ def precision_recall_jaccard(predict, target, iou_threshold = 0.5, scores = None
     ascending order of their prediction confidence score. See documentation
     of match_boxes() function on the deatils of the matching procedure.
     Parameters:
-        predict: (n,4) Tensor of box predictions
-        target: (n, 4) Tensor of box targets
+        predict: (n,4) ndarray or Tensor of box predictions
+        target: (n, 4) ndarray or Tensor of box targets
         iou_threshold: float IOU above which prediction is counted as positive
-        scores: (n,) Tensor of confidence scores for predictions
+        scores: (n,) ndarray or Tensor of confidence scores for predictions
         score_threshold: float Remove predicted boxes with score below the threshold
     Returns:
-        (precision, recall, f1): ((1,), (1,), (1,)) Tuple of Tensors
+        (precision, recall, f1): ((1,), (1,), (1,)) Tuple of Tensors or floats
     """
-    if torch.is_tensor(scores):
-        n_score = torch.sum(scores > score_threshold, dtype=torch.long)
-        predict = predict[scores.argsort()[:n_score]]
-    match_ious, _, _ = match_boxes(predict, target)
-    tp = torch.sum(match_ious > iou_threshold, dtype=torch.float)
-    precision = tp/predict.shape[0]
-    recall = tp/target.shape[0]
-    jaccard = tp/(predict.shape[0]+target.shape[0]-tp)
+    tp, fp, fn = tp_fp_fn_img(predict, target, iou_threshold, scores, score_threshold)
+    if torch.is_tensor(tp):
+        tp = tp.float()
+    precision = tp/(tp+fp)
+    recall = tp/(tp+fn)
+    jaccard = tp/(tp+fp+fn)
     return precision, recall, jaccard
 
-def precision(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
-    """Refer to documentation on precision_recall_jaccard() function"""
-    return precision_recall(predict, target, iou_threshold, scores, score_threshold)[0]
+def precision_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+    """Refer to documentation on precision_recall_jaccard_img() function"""
+    tp, fp, fn = tp_fp_fn_img(predict, target, iou_threshold, scores, score_threshold)
+    if torch.is_tensor(tp):
+        tp = tp.float()
+    return tp/(tp+fp)
 
-def recall(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+def recall_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """Refer to documentation on precision_recall_jaccard() function"""
-    return precision_recall(predict, target, iou_threshold, scores, score_threshold)[1]
+    tp, fp, fn = tp_fp_fn_img(predict, target, iou_threshold, scores, score_threshold)
+    if torch.is_tensor(tp):
+        tp = tp.float()
+    return tp/(tp+fn)
 
-def f1(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+def f1_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """Calculates F1 = 2*precision*recall/(precision+recall)
     For additional information refer to documentation on precision_recall() function"""
-    precision, recall = precision_recall(predict, target, iou_threshold, scores, score_threshold)
-    return 2*precision*recall/(precision+recall)
+    tp, fp, fn = tp_fp_fn_img(predict, target, iou_threshold, scores, score_threshold)
+    if torch.is_tensor(tp):
+        tp = tp.float()
+    return 2*tp/(2*tp+fp+fn)
 
-def jaccard_score(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+def jaccard_score_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """Refer to documentation on precision_recall_jaccard() function"""
-    return precision_recall(predict, target, iou_threshold, scores, score_threshold)[2]
+    tp, fp, fn = tp_fp_fn_img(predict, target, iou_threshold, scores, score_threshold)
+    if torch.is_tensor(tp):
+        tp = tp.float()
+    return tp/(tp+fp+fn)
 
-def average_precision(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
+def average_precision_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
     """ Calculates average precision (area under precision vs recall curve)
     for object detection given specified IOU threshold for intersection between
     predicted and target bounding boxes. All boxes are assumed to predict
@@ -147,18 +231,48 @@ def average_precision(predict, target, iou_threshold = 0.5, scores = None, score
     Returns:
         ap: ((1,) Tensor
     """
-    if torch.is_tensor(scores):
-        n_score = torch.sum(scores > score_threshold, dtype=torch.long)
-        predict = predict[scores.argsort()[:n_score]]
-    match_ious, p_idxs, _ = match_boxes(predict, target)
-    np, nt, dev = predict.shape[0], target.shape[0], predict.device
-    tp_boxes = torch.zeros(np, device=dev).index_put((p_idxs,), match_ious) > iou_threshold
-    precisions = tp_boxes.cumsum(dim=0,dtype=torch.float) / torch.arange(1, np+1, device=dev, dtype=torch.float)
-    print(precisions)
-    ap = precisions[tp_boxes].sum() / nt
+    p, t = _check_box_args(predict, target)
+    if scores is not None:
+        assert isinstance(scores, type(p)), \
+            "If provided scores should have the same type as predict and target (ndarray or Tensor)"
+        n_score = (scores > score_threshold).sum()
+        p = p[scores.argsort()[:n_score]]
+    if torch.is_tensor(p):
+        match_ious, p_idxs, _ = match_boxes_numpy(p.cpu().numpy(), t.cpu().numpy())
+    else:
+        match_ious, p_idxs, _ = match_boxes_numpy(p, t)
+    npredict, ntarget = p.shape[0], t.shape[0]
+    tp_boxes = np.zeros(npredict)
+    tp_boxes.put((p_idxs,), match_ious)
+    # We can safely use put above since matching indexes are quaranteed to be unique
+    tp_boxes = np.flip(tp_boxes > iou_threshold)
+    precisions = tp_boxes.cumsum(axis=0)/np.arange(1, npredict+1)
+    ap = precisions[tp_boxes].sum() / ntarget
+    if torch.is_tensor(p):
+        ap = torch.from_numpy(np.array(ap)).to(p)
     return ap
 
-def match_boxes(predict, target):
+def match_boxes(predict,target):
+    """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
+    and indexes of matched boxes. Gready box assignement used.
+    Each predicted box can be assigned to only 1 target box (box with maximal IOU).
+    If multiple predicted boxes are assigned to the same target box
+    only the box with maximal prediction score is used (other prediction
+    boxes will have IOU of 0). The prediction boxes should be sorted
+    in ascending order of their prediction confidence score.
+    Parameters:
+        predict: (n, 4) Tensor or ndarray of box predictions
+        target: (n, 4) Tensor or ndarray of box targets
+    Returns:
+        (ious, p_idxs, t_idxs): tuple of Tensors or ndarrays
+    """
+    p, t = _check_box_args(predict, target)
+    if isinstance(p, np.ndarray):
+        return match_boxes_numpy(p, t)
+    else:
+        return match_boxes_torch(p, t)
+
+def match_boxes_torch(predict, target):
     """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
     and indexes of matched boxes. Gready box assignement used.
     Each predicted box can be assigned to only 1 target box (box with maximal IOU).
@@ -170,13 +284,51 @@ def match_boxes(predict, target):
         predict: (n,4) Tensor of box predictions
         target: (n, 4) Tensor of box targets
     Returns:
-        (ious, p_idxs, t_idxs): Tuple of tensors
+        (ious, p_idxs, t_idxs): tuple of tensors
     """
     dev = predict.device
-    ious, idxs = iou(predict, target, keepdim=True).max(dim=-1)
-    match_ious = torch.zeros(target.shape[0], device=dev).index_put((idxs,),ious)
-    p_idxs = -torch.ones(target.shape[0], dtype=torch.long, device=dev)
-    p_idxs = p_idxs.index_put((idxs,),torch.arange(predict.shape[0], device=dev))
-    t_idxs = torch.arange(target.shape[0], device=dev)
-    matched = match_ious.nonzero().squeeze()
+    ious, p_idxs, t_idxs = match_boxes_numpy(predict.cpu().numpy(), target.cpu().numpy())
+    return torch.as_tensor(ious, device=dev), torch.as_tensor(p_idxs, device=dev), torch.as_tensor(t_idxs, device=dev)
+    # The pytorch code below is just too slow
+    # ious, idxs = iou_torch(predict, target).max(dim=-1)
+    # match_ious = torch.zeros(target.shape[0], device=dev)
+    # for v, i in zip(ious, idxs):
+    #     match_ious[i] = v
+    # # To replace the cycle above the command below does not work on GPU when there are duplicate indexes, but works on CPU
+    # # match_ious = match_ious.index_copy(0, idxs, ious)
+    # p_idxs = torch.zeros(target.shape[0], dtype=torch.long, device=dev)
+    # for v, i in enumerate(idxs):
+    #     p_idxs[i] = v
+    # # To replace the cycle above the command below does not work on GPU when there are duplicate indexes, but works on CPU
+    # # p_idxs = p_idxs.index_copy(0, idxs, torch.arange(predict.shape[0], dtype=torch.long, device=dev))
+    # t_idxs = torch.arange(target.shape[0], dtype=torch.long, device=dev)
+    # matched = match_ious.nonzero().squeeze()
+    # return match_ious[matched], p_idxs[matched], t_idxs[matched]
+
+def match_boxes_numpy(predict, target):
+    """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
+    and indexes of matched boxes. Gready box assignement used.
+    Each predicted box can be assigned to only 1 target box (box with maximal IOU).
+    If multiple predicted boxes are assigned to the same target box
+    only the box with maximal prediction score is used (other prediction
+    boxes will have IOU of 0). The prediction boxes should be sorted
+    in ascending order of their prediction confidence score.
+    Parameters:
+        predict: (n,4) ndarray of box predictions
+        target: (n, 4) ndarray of box targets
+    Returns:
+        (ious, p_idxs, t_idxs): tuple of ndarrays
+    """
+    iou_matrix = iou_numpy(predict, target)
+    ious, idxs = iou_matrix.max(axis=-1), iou_matrix.argmax(axis=-1)
+    match_ious = np.zeros(target.shape[0], dtype=ious.dtype)
+    # match_ious.put(idxs, ious) # This works instead of cycle below but not sure if it is guaranteed to work.
+    for v, i in zip(ious, idxs):
+        match_ious[i] = v
+    p_idxs = np.zeros(target.shape[0], dtype=np.long)
+    # p_idxs.put(idxs, np.arange(predict.shape[0])) # This works instead of cycle below but not sure if it is guaranteed to work.
+    for v, i in enumerate(idxs):
+        p_idxs[i] = v
+    t_idxs = np.arange(target.shape[0])
+    matched = match_ious.nonzero()[0]
     return match_ious[matched], p_idxs[matched], t_idxs[matched]
