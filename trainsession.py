@@ -7,7 +7,7 @@ from tensorboardX import SummaryWriter
 import skimage.io as io
 import numpy as np
 from image.datasets.yolo import labelsToBoxes
-from image.utils import nms
+from image.metrics.localization import nms
 from image.cv2transforms import AutoContrast, Gamma
 from skimage.transform import rescale
 

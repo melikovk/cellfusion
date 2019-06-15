@@ -243,27 +243,3 @@ def centerinside(box:Rect, boxes, lt_anchor = 'topleft'):
     else:
         raise ValueError("lt_anchor should be {'topleft'|'center'}")
     return np.all(np.stack((xs>=x, xs<x+w, ys>=y, ys<y+h)), axis=0)
-
-def nms(boxes, scores, iou_threshold):
-    """ Given an array of rectangular boxes and confidence scores filters out boxes that
-        overlap more than iou_threshold with boxes that have higher score
-    Takes
-        boxes: (n,4) Tensor
-        scores: (n,) Tensor
-        iou_threshold: float
-    Returns
-        keep_idx: Tensor
-    """
-    assert isinstance(scores, type(boxes)), \
-        "second argument should have the same type as the first"
-    assert scores.shape[0] == boxes.shape[0], \
-        "Number of scores and boxes should be the same"
-    keep_idx = torch.ones_like(scores, dtype = torch.uint8)
-    order = scores.argsort(descending = True)
-    ious = iou(boxes, boxes, usegpu=True) > iou_threshold
-    for idx in order:
-        if keep_idx[idx].item() != 0:
-            remove = ious[idx].nonzero().squeeze()
-            keep_idx[remove] = 0
-            keep_idx[idx] = 1
-    return keep_idx.nonzero().squeeze()

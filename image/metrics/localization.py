@@ -332,3 +332,35 @@ def match_boxes_numpy(predict, target):
     t_idxs = np.arange(target.shape[0])
     matched = match_ious.nonzero()[0]
     return match_ious[matched], p_idxs[matched], t_idxs[matched]
+
+def nms(boxes, scores, iou_threshold):
+    """ Given an array of rectangular boxes and confidence scores filters out boxes that
+        overlap more than iou_threshold with boxes that have higher score
+    Takes
+        boxes: (n,4) ndarray or Tensor
+        scores: (n,) ndarray or Tensor
+        iou_threshold: float
+    Returns
+        keep_idx: ndarray or Tensor with boolean mask of retained boxes
+    """
+    assert isinstance(boxes, np.ndarray) or torch.is_tensor(boxes), \
+        "boxes should be ndarray or Tensor"
+    assert isinstance(scores, type(boxes)), \
+        "scores should have the same type as the first"
+    assert scores.shape[0] == boxes.shape[0], \
+        "Number of scores and boxes should be the same"
+    ious = iou(boxes, boxes) > iou_threshold
+    if torch.is_tensor(scores):
+        scores = scores.cpu().numpy()
+        ious = ious.cpu().numpy()
+    ious = ious.astype(np.bool)
+    keep_idx = np.ones_like(scores, dtype = np.uint8)
+    order = np.flip(scores.argsort())
+    for idx in order:
+        if keep_idx[idx] != 0:
+            keep_idx[ious[idx]] = 0
+            keep_idx[idx] = 1
+    if torch.is_tensor(boxes):
+        return torch.tensor(keep_idx).to(boxes.device)
+    else:
+        return keep_idx
