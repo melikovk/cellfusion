@@ -153,6 +153,8 @@ def tp_fp_fn_img(predict, target, iou_threshold = 0.5, scores = None, score_thre
             "If provided scores should have the same type as predict and target (ndarray or Tensor)"
         n_score = (scores > score_threshold).sum()
         p = p[scores.argsort()[:n_score]]
+    if t.shape[0] == 0:
+        return 0, p.shape[0], 0
     if torch.is_tensor(p):
         match_ious, _, _ = match_boxes_torch(p, t)
     else:
@@ -334,14 +336,16 @@ def match_boxes_numpy(predict, target):
     return match_ious[matched], p_idxs[matched], t_idxs[matched]
 
 def nms(boxes, scores, iou_threshold):
-    """ Given an array of rectangular boxes and confidence scores filters out boxes that
-        overlap more than iou_threshold with boxes that have higher score
+    """ Given an array of rectangular boxes and confidence scores filters out boxes
+        that overlap more than iou_threshold with boxes that have higher score.
+        Returns an ndarray or Tensor of indexes of retained boxes sorted in the
+        descending order of box confidence scores
     Takes
         boxes: (n,4) ndarray or Tensor
         scores: (n,) ndarray or Tensor
         iou_threshold: float
     Returns
-        keep_idx: ndarray or Tensor with boolean mask of retained boxes
+        keep_idx: ndarray or Tensor with indexes of retained boxes
     """
     assert isinstance(boxes, np.ndarray) or torch.is_tensor(boxes), \
         "boxes should be ndarray or Tensor"
@@ -354,13 +358,37 @@ def nms(boxes, scores, iou_threshold):
         scores = scores.cpu().numpy()
         ious = ious.cpu().numpy()
     ious = ious.astype(np.bool)
-    keep_idx = np.ones_like(scores, dtype = np.uint8)
+    keep_mask = np.ones_like(scores, dtype = bool)
     order = np.flip(scores.argsort())
+    keep_idx = np.ones_like(scores, dtype=int)
+    n = 0
     for idx in order:
-        if keep_idx[idx] != 0:
-            keep_idx[ious[idx]] = 0
-            keep_idx[idx] = 1
+        if keep_mask[idx]:
+            keep_mask[ious[idx]] = False
+            keep_idx[n] = idx
+            n += 1
     if torch.is_tensor(boxes):
-        return torch.tensor(keep_idx).to(boxes.device)
+        return torch.tensor(keep_idx[:n]).to(boxes.device)
     else:
-        return keep_idx
+        return keep_idx[:n]
+
+def precision_recall_f1_batch(predict, target, labeltoboxesfunc, iou_thresholds, nms_threshold = 0.8, score_threshold = 0.5):
+    assert predict.shape == target.shape, \
+        "predict and target Tensor should have same shape"
+    counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
+    predict = predict.cpu().numpy()
+    target = target.cpu().numpy()
+    for img in range(predict.shape[0]):
+        pboxes, pscores = labeltoboxesfunc(predict[img], threshold=score_threshold)
+        tboxes, tscores = labeltoboxesfunc(target[img], threshold=score_threshold)
+        tboxes = tboxes[nms(tboxes, tscores,.95)]
+        pboxes = pboxes[nms(pboxes, pscores, nms_threshold)]
+        for i, thresh in enumerate(iou_thresholds):
+            counts[i] += tp_fp_fn_img(pboxes, tboxes, iou_threshold=thresh)
+    results = {}
+    for i, thresh in enumerate(iou_thresholds):
+        tp, fp, fn = counts[i]
+        results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
+        results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
+        results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if tp+fn !=0 else 0
+    return results

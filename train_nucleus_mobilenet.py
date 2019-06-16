@@ -11,8 +11,10 @@ from model_zoo import mobilenet_v2, cnn_heads
 from losses import yolo_loss, yolo1_loss, yolo2_loss
 from model_zoo.vision_models import CNNModel, saveboxes, localization_accuracy
 from image.datasets.yolo import YoloGridDataset, YoloRandomDataset, RandomLoader, labelsToBoxes
+from image.metrics.localization import precision_recall_f1_batch
 from model_zoo import catalog
 import argparse
+from functools import partial
 
 _MODEL_SELECTION = {'base': catalog.mobilenet_v2_1ch_object_detect_base,
                     'full': catalog.mobilenet_v2_1ch_object_detect_full,
@@ -56,7 +58,8 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                            yolo2_loss,
                            optim.Adam,
                            model.parameters(),
-                           iou_accuracy,
+                           # iou_accuracy,
+                           partial(precision_recall_f1_batch, labeltoboxesfunc = labelsToBoxes, iou_thresholds=[.5]),
                            log_dir = logdir,
                            opt_defaults = {'lr':init_lr,'weight_decay':1e-5},
                            scheduler = optim.lr_scheduler.CosineAnnealingLR,

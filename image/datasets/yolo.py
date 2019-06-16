@@ -154,29 +154,28 @@ class YoloRandomDataset(Dataset):
             self.xs = np.random.randint(self.bsize, imgw-self.bsize-self.w, self.length)
             self.ys = np.random.randint(self.bsize, imgh-self.bsize-self.h, self.length)
 
-    @staticmethod
-    def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
+    def labelsToBoxes(self, labels, threshold = 0.5, offset=(0,0)):
         """ Function to convert yolo type model output to bounding boxes
         Parameters:
-            labels:     [5:width:height] numpy array of predictions
+            labels:     [5:width:height] Tensor of predictions
                         1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
                         all dimensions are normalized to grid_size
             grid_size:  Size of the model grid
             offset:     offset of the crop in the image for multicrop predictions (in pixels)
             threshold:  Pobj threshold to use
         Returns:
-            (Tensor(Xlt,Ylt,W,H), Tensor(Pobj)) all coordinates are float values in pixels
+            (ndarray(Xlt,Ylt,W,H), ndarray(Pobj)) all coordinates are float values in pixels
         """
         if isinstance(offset, int):
             offx = offy = offset
         else:
             offx, offy = offset
         _, wi, hi = labels.shape
-        boxes = labels[1:].copy()
-        scores = labels[0].copy()
+        boxes = labels[1:].cpu().numpy()
+        scores = labels[0].cpu().numpy()
         boxes[0] += np.arange(0, wi).reshape(-1,1) - boxes[2]/2
         boxes[1] += np.arange(0, hi).reshape(1,-1) - boxes[3]/2
-        boxes = boxes*grid_size
+        boxes = boxes*self.grid_size
         boxes[0] += offx
         boxes[1] += offy
         boxes = boxes.reshape((4,-1)).T
@@ -184,7 +183,36 @@ class YoloRandomDataset(Dataset):
         idx = (scores > threshold).nonzero()[0]
         return boxes[idx], scores[idx]
 
-labelsToBoxes = YoloRandomDataset.labelsToBoxes
+def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
+    """ Function to convert yolo type model output to bounding boxes
+    Parameters:
+        labels:     [5:width:height] Tensor of predictions
+                    1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
+                    all dimensions are normalized to grid_size
+        grid_size:  Size of the model grid
+        offset:     offset of the crop in the image for multicrop predictions (in pixels)
+        threshold:  Pobj threshold to use
+    Returns:
+        (ndarray(Xlt,Ylt,W,H), ndarray(Pobj)) all coordinates are float values in pixels
+    """
+    if isinstance(offset, int):
+        offx = offy = offset
+    else:
+        offx, offy = offset
+    _, wi, hi = labels.shape
+    # boxes = labels[1:].cpu().numpy()
+    # scores = labels[0].cpu().numpy()
+    boxes = labels[1:].copy()
+    scores = labels[0].copy()
+    boxes[0] += np.arange(0, wi).reshape(-1,1) - boxes[2]/2
+    boxes[1] += np.arange(0, hi).reshape(1,-1) - boxes[3]/2
+    boxes = boxes*grid_size
+    boxes[0] += offx
+    boxes[1] += offy
+    boxes = boxes.reshape((4,-1)).T
+    scores = scores.reshape((1, -1)).squeeze()
+    idx = (scores > threshold).nonzero()
+    return boxes[idx], scores[idx]
 
 # @torch.no_grad()
 # def labelsToBoxes_torch(labels, grid_size=32, offset=(0,0), threshold = 0.5):

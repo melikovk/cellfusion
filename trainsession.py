@@ -177,7 +177,7 @@ class TrainSession:
         self.model.eval()
         loss = defaultdict(lambda:0.0)
         size = 0
-        accuracy = 0.0
+        accuracy = defaultdict(lambda:0.0)
         for inputs, labels in data:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
@@ -185,11 +185,16 @@ class TrainSession:
             batch_loss = self.lossfunc(outputs, labels)
             for k, v in batch_loss.items():
                 loss[k] += v.item() * inputs.size(0)
-            accuracy += self.acc_func(outputs, labels).item()
+            # accuracy += self.acc_func(outputs, labels).item()
+            batch_acc = self.acc_func(outputs, labels)
+            for k, v in batch_acc.items():
+                accuracy[k] += v * inputs.size(0)
             size += inputs.size(0)
         for k, v in loss.items():
             loss[k] = loss[k]/size
-        return (loss, accuracy/size)
+        for k, v in accuracy.items():
+            accuracy[k] = accuracy[k]/size
+        return (loss, accuracy)
 
     def train(self, train_data, valid_data, epochs = None):
         if epochs is None:
@@ -202,7 +207,8 @@ class TrainSession:
             self.model.train()
             train_loss = defaultdict(lambda:0.0)
             size = 0
-            train_acc = 0.0
+            # train_acc = 0.0
+            train_acc = defaultdict(lambda:0.0)
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
@@ -213,16 +219,21 @@ class TrainSession:
                 # statistics
                 for k, v in batch_loss.items():
                     train_loss[k] += v.item() * inputs.size(0)
-                train_acc += self.acc_func(outputs, labels).item()
+                # train_acc += self.acc_func(outputs, labels).item()
+                with torch.no_grad():
+                    batch_acc = self.acc_func(outputs, labels)
+                for k, v in batch_acc.items():
+                    train_acc[k] += v * inputs.size(0)
                 size += inputs.size(0)
                 pbar.update(1)
             for k, v in train_loss.items():
                 train_loss[k] = train_loss[k]/size
-            train_acc = train_acc / size
+            # train_acc = train_acc / size
+            for k, v in train_acc.items():
+                train_acc[k] = train_acc[k]/size
             valid_loss, valid_acc = self.evaluate(valid_data)
             message = (f'Epoch {epoch+1} of {epochs} took {tqdm.format_interval(pbar.last_print_t-pbar.start_t)}\n'
-                       f'Train Loss: {train_loss["loss"]:.4f}, Train Acc: {train_acc:.4f}\n'
-                       f'Validation Loss: {valid_loss["loss"]:.4f}, Validation Acc: {valid_acc:.4f}')
+                       f'Train Loss: {train_loss["loss"]:.4f}, Validation Loss: {valid_loss["loss"]:.4f}')
             tqdm.write(message)
             if self.log_dir:
                 metrics = {}
@@ -230,8 +241,12 @@ class TrainSession:
                     metrics[k+'/train'] = v
                 for k, v in valid_loss.items():
                     metrics[k+'/validation'] = v
-                metrics['accuracy/train'] = train_acc
-                metrics['accuracy/validation'] = valid_acc
+                for k, v in train_acc.items():
+                    metrics[k+'/train'] = v
+                for k, v in valid_acc.items():
+                    metrics[k+'/validation'] = v
+                # metrics['accuracy/train'] = train_acc
+                # metrics['accuracy/validation'] = valid_acc
                 for metric, value in metrics.items():
                     writer.add_scalar(metric, value, self.epoch)
             if self.saver:
