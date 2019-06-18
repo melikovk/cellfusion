@@ -8,10 +8,10 @@ import numpy as np
 import torchvision.transforms as transforms
 import image.cv2transforms as cv2transforms
 from model_zoo import mobilenet_v2, cnn_heads
-from losses import yolo_loss, yolo1_loss, yolo2_loss
+from losses import yolo_loss, yolo1_loss, yolo2_loss, object_detection_loss
 from model_zoo.vision_models import CNNModel, saveboxes, localization_accuracy
 from image.datasets.yolo import YoloGridDataset, YoloRandomDataset, RandomLoader, labelsToBoxes
-from image.metrics.localization import precision_recall_f1_batch
+from image.metrics.localization import precision_recall_f1_batch, precision_recall_meanIOU_batch
 from model_zoo import catalog
 import argparse
 from functools import partial
@@ -27,7 +27,8 @@ def imgToTensor(img):
 
 def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cuda:0',
                             chanel='nuclei', init_lr = 0.01, batch = 32,
-                            t_max = 20, lr_mult = 0.5, n_cycles = 10):
+                            t_max = 20, lr_mult = 0.5, n_cycles = 10, size_transform = 'log',
+                            confidence_loss='crossentropy'):
     """ Procedure that trains mobilenet_v2 based nucleus recognition models
     Parameters:
         datadir: folder with train and test data
@@ -55,11 +56,11 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                                         transforms = yolo_transforms) for names in test_names])
     model = _MODEL_SELECTION[modelchoice]()
     session = TrainSession(model,
-                           yolo2_loss,
+                           partial(object_detection_loss, confidence_loss = confidence_loss, size_transform=size_transform),
                            optim.Adam,
                            model.parameters(),
                            # iou_accuracy,
-                           partial(precision_recall_f1_batch, labeltoboxesfunc = labelsToBoxes, iou_thresholds=[.5]),
+                           partial(precision_recall_meanIOU_batch, labeltoboxesfunc = labelsToBoxes, iou_thresholds=[0.5, 0.7, 0.9]),
                            log_dir = logdir,
                            opt_defaults = {'lr':init_lr,'weight_decay':1e-5},
                            scheduler = optim.lr_scheduler.CosineAnnealingLR,
@@ -86,6 +87,8 @@ if __name__ == "__main__":
     main_parser.add_argument('--t_max', type = int, default = 20, help = 'Cycle length for scheduler')
     main_parser.add_argument('--lr_mult', type = float, default = 0.5, help = 'Factor to adjust learning rate for consecutive cycles')
     main_parser.add_argument('--n_cycles', type = int, default = 10, help = 'Number of cycles of training')
+    main_parser.add_argument('--size_transform', choices = ['log','sqrt','none'], default= 'log', help = 'Transformation of the box size for loss calculation')
+    main_parser.add_argument('--confidence_loss', choices = ['mse','corssentropy'], default= 'crossentropy', help = 'Transformation of the box size for loss calculation')
     main_args = main_parser.parse_args()
     train_nucleus_mobilenet(modelchoice = main_args.model,
                             datadir = main_args.datadir,
@@ -97,4 +100,6 @@ if __name__ == "__main__":
                             batch = main_args.batch,
                             t_max = main_args.t_max,
                             lr_mult = main_args.lr_mult,
-                            n_cycles = main_args.n_cycles)
+                            n_cycles = main_args.n_cycles,
+                            size_transform = main_args.size_transform,
+                            confidence_loss = main_args.confidence_loss)
