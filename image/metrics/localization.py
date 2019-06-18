@@ -373,6 +373,11 @@ def nms(boxes, scores, iou_threshold):
         return keep_idx[:n]
 
 def precision_recall_f1_batch(predict, target, labeltoboxesfunc, iou_thresholds, nms_threshold = 0.8, score_threshold = 0.5):
+    """ Calculates precision, recall and F1 score on a batch of predictions.
+
+
+    """
+
     assert predict.shape == target.shape, \
         "predict and target Tensor should have same shape"
     counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
@@ -391,4 +396,28 @@ def precision_recall_f1_batch(predict, target, labeltoboxesfunc, iou_thresholds,
         results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
         results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
         results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if tp+fn !=0 else 0
+    return results
+
+def precision_recall_meanIOU_batch(predict, target, labeltoboxesfunc, iou_thresholds, nms_threshold = 0.8, score_threshold = 0.5):
+    assert predict.shape == target.shape, \
+        "predict and target Tensor should have same shape"
+    counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
+    ious = []
+    predict = predict.cpu().numpy()
+    target = target.cpu().numpy()
+    for img in range(predict.shape[0]):
+        pboxes, pscores = labeltoboxesfunc(predict[img], threshold=score_threshold)
+        tboxes, tscores = labeltoboxesfunc(target[img], threshold=score_threshold)
+        tboxes = tboxes[nms(tboxes, tscores,.95)]
+        pboxes = pboxes[nms(pboxes, pscores, nms_threshold)]
+        if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
+            ious.append(match_boxes_numpy(pboxes, tboxes)[0])
+        for i, thresh in enumerate(iou_thresholds):
+            counts[i] += tp_fp_fn_img(pboxes, tboxes, iou_threshold=thresh)
+    results = {}
+    for i, thresh in enumerate(iou_thresholds):
+        tp, fp, fn = counts[i]
+        results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
+        results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
+    results["meanIOU"] = np.concatenate(ious).mean() if len(ious) > 0 else 0
     return results
