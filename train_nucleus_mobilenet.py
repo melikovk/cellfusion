@@ -29,7 +29,7 @@ def imgToTensor(img):
 def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cuda:0',
                             chanel='nuclei', init_lr = 0.01, batch = 32,
                             t_max = 20, lr_mult = 0.5, n_cycles = 10, size_transform = 'log',
-                            confidence_loss='crossentropy'):
+                            confidence_loss='crossentropy', localization_weight=1.):
     """ Procedure that trains mobilenet_v2 based nucleus recognition models
     Parameters:
         datadir: folder with train and test data
@@ -57,7 +57,7 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                                         transforms = yolo_transforms) for names in test_names])
     model = _MODEL_SELECTION[modelchoice]()
     session = TrainSession(model,
-                           partial(object_detection_loss, confidence_loss = confidence_loss, size_transform=size_transform),
+                           partial(object_detection_loss, confidence_loss = confidence_loss, size_transform=size_transform, localization_weight=localization_weight),
                            optim.Adam,
                            model.parameters(),
                            # iou_accuracy,
@@ -90,6 +90,7 @@ if __name__ == "__main__":
     main_parser.add_argument('--n_cycles', type = int, default = 10, help = 'Number of cycles of training')
     main_parser.add_argument('--size_transform', choices = ['log','sqrt','none'], default= 'log', help = 'Transformation of the box size for loss calculation')
     main_parser.add_argument('--confidence_loss', choices = ['mse','corssentropy'], default= 'crossentropy', help = 'Transformation of the box size for loss calculation')
+    main_parser.add_argument('--localization_weight', type = float, default = 1.0, help = 'Multiplier for the localization loss')
     main_args = main_parser.parse_args()
     train_nucleus_mobilenet(modelchoice = main_args.model,
                             datadir = main_args.datadir,
@@ -103,4 +104,5 @@ if __name__ == "__main__":
                             lr_mult = main_args.lr_mult,
                             n_cycles = main_args.n_cycles,
                             size_transform = main_args.size_transform,
-                            confidence_loss = main_args.confidence_loss)
+                            confidence_loss = main_args.confidence_loss,
+                            localization_weight = main.args.localization_weight)
