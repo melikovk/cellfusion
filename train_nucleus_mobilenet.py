@@ -19,7 +19,8 @@ from functools import partial
 _MODEL_SELECTION = {'base': catalog.mobilenet_v2_1ch_object_detect_base,
                     'full': catalog.mobilenet_v2_1ch_object_detect_full,
                     'shrink': catalog.mobilenet_v2_1ch_object_detect_shrink,
-                    'deep': catalog.mobilenet_v2_1ch_object_detect_deep}
+                    'deep': catalog.mobilenet_v2_1ch_object_detect_deep,
+                    'split_base': catalog.mobilenet_v2_1ch_object_detect_split_base}
 
 
 def imgToTensor(img):

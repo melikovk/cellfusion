@@ -11,7 +11,20 @@ _head_params = {'in_features': 320,
                'hidden_features': [1024, 1024],
                'hidden_kernel': [3, 3],
                'bn_args': {'momentum':0.01},
-               'act_args': {}}
+               'act_args': {},
+               'probability': False,
+               'coordinate_transform': 'hardtanh',
+               'eps': 1e-5}
+
+_split_head_params = {'in_features': 320,
+               'activation': 'relu',
+               'hidden_features': [256]*4,
+               'hidden_kernel': [3]*4,
+               'bn_args': {'momentum':0.01},
+               'act_args': {},
+               'probability': False,
+               'coordinate_transform': 'hardtanh',
+               'eps': 1e-5}
 
 def mobilenet_v2_1ch_object_detect_base():
     """ Creates an object detection model for 1 chanel images with feature extractor
@@ -21,6 +34,16 @@ def mobilenet_v2_1ch_object_detect_base():
     features_params = _features_params.copy()
     head_params = _head_params.copy()
     model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
+    return model
+
+def mobilenet_v2_1ch_object_detect_split_base():
+    """ Creates an object detection model for 1 chanel images with feature extractor
+        that is similar to 1x MobileNet_v2 in original paper.
+        Uses simple 2 layer fully convolutional object detection head
+    """
+    features_params = _features_params.copy()
+    head_params = _split_head_params.copy()
+    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHeadSplit(**head_params))
     return model
 
 def mobilenet_v2_1ch_object_detect_full():
