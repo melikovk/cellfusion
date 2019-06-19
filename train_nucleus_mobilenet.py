@@ -105,4 +105,4 @@ if __name__ == "__main__":
                             n_cycles = main_args.n_cycles,
                             size_transform = main_args.size_transform,
                             confidence_loss = main_args.confidence_loss,
-                            localization_weight = main.args.localization_weight)
+                            localization_weight = main_args.localization_weight)
