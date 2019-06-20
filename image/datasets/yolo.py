@@ -214,40 +214,15 @@ def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
     idx = (scores > threshold).nonzero()
     return boxes[idx], scores[idx]
 
-# @torch.no_grad()
-# def labelsToBoxes_torch(labels, grid_size=32, offset=(0,0), threshold = 0.5):
-#     """ Function to convert yolo type model output to bounding boxes
-#     Parameters:
-#         labels:     [5:width:height] tensor of values
-#                     1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
-#                     all dimensions are normalized to grid_size
-#         grid_size:  Size of the model grid
-#         offset:     offset of the crop in the image for multicrop predictions (in pixels)
-#         threshold:  Pobj threshold to use
-#     Returns:
-#         (Tensor(Xlt,Ylt,W,H), Tensor(Pobj)) all coordinates are float values in pixels
-#     """
-#     if isinstance(offset, int):
-#         offx = offy = offset
-#     else:
-#         offx, offy = offset
-#     wi, hi = labels.shape[-2:]
-#     boxes = labels[:,1:].clone().detach()
-#     scores = labels[:,0].clone().detach()
-#     boxes[:,0] += torch.arange(0, wi, dtype=torch.float, device = boxes.device).unsqueeze(1) - boxes[:,2]/2
-#     boxes[:,1] += torch.arange(0, hi, dtype=torch.float, device = boxes.device).unsqueeze(0) - boxes[:,3]/2
-#     boxes *= grid_size
-#     boxes[:,0] += offx
-#     boxes[:,1] += offy
-#     # boxes = boxes.view(4,-1).t()
-#     # scores = scores.view(1, -1).squeeze()
-#     # idx = (scores > threshold).nonzero().squeeze()
-#     return boxes, scores
-
-class randomIdx:
-    def __init__(self, low, high):
-        self.low = low
-        self.high = high
-
-    def __getitem__(self, idx):
-        return np.random.randint(self.low, self.high)
+def iou_anchor(labels, denom = 'union'):
+    bs = labels.reshape(5, -1).T[labels.reshape(5, -1)[0].nonzero()][:,1:].T
+    iwidths = np.minimum(bs[0]+bs[2]/2, 1) - np.maximum(bs[0]-bs[2]/2, 0)
+    iheights = np.minimum(bs[1]+bs[3]/2, 1) - np.maximum(bs[1]-bs[3]/2, 0)
+    iareas = iwidths*iheights
+    if denom == 'union':
+        ious = iareas / (1 + bs[2]*bs[3] - iareas)
+    elif denom == 'anchor':
+        ious = iareas
+    elif denom == 'box':
+        ious = iareas / (bs[2]*bs[3])
+    return ious
