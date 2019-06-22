@@ -22,139 +22,88 @@ class RandomLoader(DataLoader):
             self.dataset.reset()
         return super().__iter__()
 
-class YoloGridDataset(Dataset):
-    """ Simple dataset class to be used in pytorch
-    Takes:
-        data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
-                imgname - path to image large image
-                lblname - path to file with bounding boxes
-                winsize - size of the window crops (w, h)
-                stride - stride of the window crops
-                bsize - size of the border to ignore
-                ignore_thresh - maximum iou for intersection with "ignore" boxes
-                nuc_thresh - minimum intersection with nuclei boxes
-                transforms - transforms
-        transform: callable object to transform each image
-    Return:
-        Dataset instance
-
-    File with bounding boxes may contain boxes labelled as "ignore" if any ignore box overlaps
-    window more than ignore_thresh the window is skipped, if any nucleus box overlaps window
-    less than nuc_thresh window is also ignored, windows without any nuclei ignored as well
+class CropDataset(Dataset):
+    """ Base Dataset for all object detection datasets that crop small subimages from larger image
     """
-
-    def __init__(self, imgname, lblname, winsize=(224,224), stride=(64,64), bsize=32, grid_size=32, ignore_thresh=0.5, nuc_thresh=.8, transforms=None):
-        self.img = io.imread(imgname).T
-        self.w = winsize[0]
-        self.h = winsize[1]
-        self.grid_size = grid_size
-        self.transforms = transforms
+    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, **kwargs):
+        super().__init__()
+        self._img = io.imread(imgname).T
+        self._w, self._h = win_size
+        self._grid_size = grid_size
+        self._border_size = border_size
+        self._transforms = transforms
+        # Create array ob object boxes
         with open(lblname, 'r') as f:
             boxes = json.load(f)
-        self.nucboxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])
-        skipboxes = np.array([box['bounds'] for box in boxes if box['type'] == IGNORE]).reshape(-1,4) # reshape in case there are no ignore boxes
-        self.xs = []
-        self.ys = []
-        for x0 in range(bsize, self.img.shape[0]-bsize-self.w, stride[0]):
-            for y0 in range(bsize, self.img.shape[1]-bsize-self.h, stride[1]):
-                window = (x0,y0,self.w, self.h)
-                skipoverlaps = iou(skipboxes, window, denominator='first', keepdim=False)
-                nucs = self.nucboxes[centerinside(window, self.nucboxes)]
-                if np.all(skipoverlaps <= ignore_thresh) and nucs.shape[0]>0 and np.all(iou(nucs, window, denominator='first', keepdim=False)>=nuc_thresh):
-                    self.xs.append(x0)
-                    self.ys.append(y0)
+        self._boxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])/grid_size
+        self._boxes[:,0:2] = self._boxes[:,0:2] + self._boxes[:,2:4]/2
+        self._xys = self._init_coordinates(**kwargs)
+
+    def _init_coordinates(self):
+        raise NotImplementedError
+
+    def _get_labels(self, idx):
+        raise NotImplementedError
 
     def __len__(self):
-        return len(self.xs)
-
-    def _getlabels(self, idx):
-        x, y = self.xs[idx], self.ys[idx]
-        labels = np.zeros((5, self.w//self.grid_size, self.h//self.grid_size))
-        nucboxes = self.nucboxes[centerinside((x,y,self.w, self.h), self.nucboxes)]
-        nucboxes[:,0] = nucboxes[:,0] - x
-        nucboxes[:,1] = nucboxes[:,1] - y
-        for box in nucboxes:
-            xbox, ybox, wbox, hbox = box
-            xbox, ybox = xbox+(wbox-1)//2, ybox+(hbox-1)//2
-            xidx, yidx = xbox//self.grid_size, ybox//self.grid_size
-            xpos, ypos = xbox%self.grid_size/self.grid_size, ybox%self.grid_size/self.grid_size
-            labels[:, xidx, yidx] = [1, xpos, ypos, wbox/self.grid_size, hbox/self.grid_size]
-        return labels
+        return self._xys.shape[0]
 
     def __getitem__(self, idx):
-        img = self.transforms(self.img[self.xs[idx]:self.xs[idx]+self.w, self.ys[idx]:self.ys[idx]+self.h])
-        labels = self._getlabels(idx).astype(np.float32)
+        x, y = self._xys[idx]
+        img = self._img[x:x+self._w, y:y+self._h]
+        if self._transforms is not None:
+            img = self._transforms(img)
+        labels = self._get_labels(idx).astype(np.float32)
         return (img, labels)
 
-class YoloRandomDataset(Dataset):
-    """ Simple dataset class to be used in pytorch
-    Takes:
-        data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
-                imgname - path to image large image
-                lblname - path to file with bounding boxes
-                winsize - size of the window crops (w, h)
-                stride - stride of the window crops
-                bsize - size of the border to ignore
-                ignore_thresh - maximum iou for intersection with "ignore" boxes
-                nuc_thresh - minimum intersection with nuclei boxes
-                transforms - transforms
-        transform: callable object to transform each image
-    Return:
-        Dataset instance
-    """
+    def labels_to_boxes(self, labels, grid_size = 32, offset=(0,0), threshold = 0.5):
+        raise NotImplementedError
 
-    def __init__(self, imgname, lblname, seed=None, winsize=(224,224), bsize=0, grid_size=32, length=1000, transforms=None):
-        self.img = io.imread(imgname).T
-        self.w = winsize[0]
-        self.h = winsize[1]
-        self.bsize = bsize
-        self.grid_size = grid_size
-        self.length = length
-        self.transforms = transforms
-        self.seed = seed
-        imgw, imgh = self.img.shape
-        # read nucleus boxes and normalize sizes to grid_size
-        with open(lblname, 'r') as f:
-            boxes = json.load(f)
-        self.nucboxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])/grid_size
-        # Convert left corners into center positions
-        self.nucboxes[:,0] = self.nucboxes[:,0] + self.nucboxes[:,2]/2
-        self.nucboxes[:,1] = self.nucboxes[:,1] + self.nucboxes[:,3]/2
-        np.random.seed(seed)
-        self.xs = np.random.randint(bsize, imgw-bsize-self.w, length)
-        self.ys = np.random.randint(bsize, imgh-bsize-self.h, length)
+    def reset(self):
+        pass
 
-    def __len__(self):
-        return self.length
+class GridCropDataset(CropDataset):
+    def __init__(self, imgname, lblname, stride = None, **kwargs):
+        super().__init__(imgname, lblname, **kwargs, stride=stride)
 
-    def _getlabels(self, idx):
-        x, y = self.xs[idx]/self.grid_size, self.ys[idx]/self.grid_size
-        labels = np.zeros((5, self.w//self.grid_size, self.h//self.grid_size))
-        nucboxes = self.nucboxes[centerinside((x,y,self.w/self.grid_size, self.h/self.grid_size), self.nucboxes, lt_anchor='center')].reshape(-1,4)
-        nucboxes[:,0] = nucboxes[:,0] - x
-        nucboxes[:,1] = nucboxes[:,1] - y
-        for box in nucboxes:
+    def _init_coordinates(self, stride):
+        if stride is None:
+            stride = (self._w, self._h)
+        xrange = np.arange(self._border_size, self._img.shape[0] - self._border_size - self._w, stride[0])
+        yrange = np.arange(self._border_size, self._img.shape[1] - self._border_size - self._h, stride[1])
+        return np.stack(np.meshgrid(xrange,yrange, indexing = 'ij')).reshape(2,-1).T
+
+class RandomCropDataset(CropDataset):
+    def __init__(self, imgname, lblname, length, seed=None, **kwargs):
+        self._seed = seed
+        super().__init__(imgname, lblname, **kwargs, length=length)
+
+    def _init_coordinates(self, length):
+        if self._seed is not None:
+            np.random.seed(self._seed)
+        xs = np.random.randint(self._border_size, self._img.shape[0]-self._border_size-self._w, length)
+        ys = np.random.randint(self._border_size, self._img.shape[1]-self._border_size-self._h, length)
+        return np.stack((xs,ys), axis=-1)
+
+    def reset(self):
+        if self._seed is None:
+            self._xys = self._init_coordinates(self._xys.shape[0])
+
+class NaiveBoxDataset(CropDataset):
+    def _get_labels(self, idx):
+        x, y = self._xys[idx]/self._grid_size
+        labels = np.zeros((5, self._w//self._grid_size, self._h//self._grid_size))
+        boxes = self._boxes[centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes, lt_anchor='center')].reshape(-1,4)
+        boxes[:,0] = boxes[:,0] - x
+        boxes[:,1] = boxes[:,1] - y
+        for box in boxes:
             xbox, ybox, wbox, hbox = box
             xidx, yidx = int(np.floor(xbox)), int(np.floor(ybox))
             xpos, ypos = xbox - xidx, ybox - yidx
             labels[:, xidx, yidx] = [1, xpos, ypos, wbox, hbox]
         return labels
 
-    def __getitem__(self, idx):
-        if self.transforms is not None:
-            img = self.transforms(self.img[self.xs[idx]:self.xs[idx]+self.w, self.ys[idx]:self.ys[idx]+self.h])
-        else:
-            img = self.img[self.xs[idx]:self.xs[idx]+self.w, self.ys[idx]:self.ys[idx]+self.h]
-        labels = self._getlabels(idx).astype(np.float32)
-        return (img, labels)
-
-    def reset(self):
-        if self.seed is None:
-            imgw, imgh = self.img.shape
-            self.xs = np.random.randint(self.bsize, imgw-self.bsize-self.w, self.length)
-            self.ys = np.random.randint(self.bsize, imgh-self.bsize-self.h, self.length)
-
-    def labelsToBoxes(self, labels, threshold = 0.5, offset=(0,0)):
+    def labels_to_boxes(self, labels, threshold = 0.5, offset=(0,0)):
         """ Function to convert yolo type model output to bounding boxes
         Parameters:
             labels:     [5:width:height] Tensor of predictions
@@ -182,6 +131,46 @@ class YoloRandomDataset(Dataset):
         scores = scores.reshape((1, -1)).squeeze()
         idx = (scores > threshold).nonzero()[0]
         return boxes[idx], scores[idx]
+
+class NaiveGridDataset(GridCropDataset, NaiveBoxDataset):
+    """ Simple dataset class to be used in pytorch
+    Takes:
+        data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
+                imgname - path to image large image
+                lblname - path to file with bounding boxes
+                winsize - size of the window crops (w, h)
+                stride - stride of the window crops
+                bsize - size of the border to ignore
+                transforms - transforms
+        transform: callable object to transform each image
+    Return:
+        Dataset instance
+
+    File with bounding boxes may contain boxes labelled as "ignore" if any ignore box overlaps
+    window more than ignore_thresh the window is skipped, if any nucleus box overlaps window
+    less than nuc_thresh window is also ignored, windows without any nuclei ignored as well
+    """
+    pass
+
+class NaiveRandomDataset(RandomCropDataset, NaiveBoxDataset):
+    """ Simple dataset class to be used in pytorch
+    Takes:
+        data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
+                imgname - path to image large image
+                lblname - path to file with bounding boxes
+                winsize - size of the window crops (w, h)
+                stride - stride of the window crops
+                bsize - size of the border to ignore
+                transforms - transforms
+        transform: callable object to transform each image
+    Return:
+        Dataset instance
+    """
+    pass
+
+YoloGridDataset = NaiveGridDataset
+
+YoloRandomDataset = NaiveRandomDataset
 
 def labelsToBoxes(labels, grid_size=32, offset=(0,0), threshold = 0.5):
     """ Function to convert yolo type model output to bounding boxes

@@ -46,14 +46,13 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                                         cv2transforms.Typecast(np.float32),
                                         imgToTensor])
     trainDataset = ConcatDataset([YoloRandomDataset(*names,
-                                        winsize = (224, 224),
-                                        bsize = 32,
+                                        win_size = (224, 224),
+                                        border_size = 32,
                                         length = 500,
                                         transforms = yolo_transforms) for names in train_names])
-    validDataset = ConcatDataset([YoloRandomDataset(*names,
-                                        winsize=(224, 224),
-                                        bsize = 32,
-                                        length = 500,
+    validDataset = ConcatDataset([YoloGridDataset(*names,
+                                        win_size=(224, 224),
+                                        border_size = 32,
                                         transforms = yolo_transforms) for names in test_names])
     model = _MODEL_SELECTION[modelchoice]()
     session = TrainSession(model,
