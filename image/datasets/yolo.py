@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from ..utils import centerinside
 from ..metrics.localization import iou
 import torch
+import math
 
 NUCLEUS = 0
 BKG = 1
@@ -23,10 +24,9 @@ class RandomLoader(DataLoader):
         return super().__iter__()
 
 class CropDataset(Dataset):
-    """ Base Dataset for all object detection datasets that crop small subimages from larger image
+    """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
-    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, **kwargs):
-        super().__init__()
+    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, sample='random', length = None, seed=None, stride=None):
         self._img = io.imread(imgname).T
         self._w, self._h = win_size
         self._grid_size = grid_size
@@ -37,10 +37,26 @@ class CropDataset(Dataset):
             boxes = json.load(f)
         self._boxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])/grid_size
         self._boxes[:,0:2] = self._boxes[:,0:2] + self._boxes[:,2:4]/2
-        self._xys = self._init_coordinates(**kwargs)
+        self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
 
-    def _init_coordinates(self):
-        raise NotImplementedError
+    def _init_coordinates(self,sample, length, seed, stride):
+        if sample == 'random':
+            self._seed = seed
+            if length is None:
+                length = self._img.shape[-1]*self._img.shape[-2] // (self._w*self._h)
+            if self._seed is not None:
+                np.random.seed(self._seed)
+            xs = np.random.randint(self._border_size, self._img.shape[-2]-self._border_size-self._w, length)
+            ys = np.random.randint(self._border_size, self._img.shape[-1]-self._border_size-self._h, length)
+            return np.stack((xs,ys), axis=-1)
+        elif sample == 'grid':
+            self._seed = 0
+            if stride is None:
+                stride = (self._w, self._h)
+            xrange = np.arange(self._border_size, self._img.shape[-2] - self._border_size - self._w, stride[0])
+            yrange = np.arange(self._border_size, self._img.shape[-1] - self._border_size - self._h, stride[1])
+            return np.stack(np.meshgrid(xrange, yrange, indexing = 'ij')).reshape(2,-1).T
+
 
     def _get_labels(self, idx):
         raise NotImplementedError
@@ -56,34 +72,9 @@ class CropDataset(Dataset):
         labels = self._get_labels(idx).astype(np.float32)
         return (img, labels)
 
-    def labels_to_boxes(self, labels, grid_size = 32, offset=(0,0), threshold = 0.5):
+    @staticmethod
+    def labels_to_boxes(labels, grid_size, offset, threshold):
         raise NotImplementedError
-
-    def reset(self):
-        pass
-
-class GridCropDataset(CropDataset):
-    def __init__(self, imgname, lblname, stride = None, **kwargs):
-        super().__init__(imgname, lblname, **kwargs, stride=stride)
-
-    def _init_coordinates(self, stride):
-        if stride is None:
-            stride = (self._w, self._h)
-        xrange = np.arange(self._border_size, self._img.shape[0] - self._border_size - self._w, stride[0])
-        yrange = np.arange(self._border_size, self._img.shape[1] - self._border_size - self._h, stride[1])
-        return np.stack(np.meshgrid(xrange,yrange, indexing = 'ij')).reshape(2,-1).T
-
-class RandomCropDataset(CropDataset):
-    def __init__(self, imgname, lblname, length, seed=None, **kwargs):
-        self._seed = seed
-        super().__init__(imgname, lblname, **kwargs, length=length)
-
-    def _init_coordinates(self, length):
-        if self._seed is not None:
-            np.random.seed(self._seed)
-        xs = np.random.randint(self._border_size, self._img.shape[0]-self._border_size-self._w, length)
-        ys = np.random.randint(self._border_size, self._img.shape[1]-self._border_size-self._h, length)
-        return np.stack((xs,ys), axis=-1)
 
     def reset(self):
         if self._seed is None:
@@ -94,8 +85,7 @@ class NaiveBoxDataset(CropDataset):
         x, y = self._xys[idx]/self._grid_size
         labels = np.zeros((5, self._w//self._grid_size, self._h//self._grid_size))
         boxes = self._boxes[centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes, lt_anchor='center')].reshape(-1,4)
-        boxes[:,0] = boxes[:,0] - x
-        boxes[:,1] = boxes[:,1] - y
+        boxes[:,0:2] = boxes[:,0:2] - [x, y]
         for box in boxes:
             xbox, ybox, wbox, hbox = box
             xidx, yidx = int(np.floor(xbox)), int(np.floor(ybox))
@@ -103,7 +93,8 @@ class NaiveBoxDataset(CropDataset):
             labels[:, xidx, yidx] = [1, xpos, ypos, wbox, hbox]
         return labels
 
-    def labels_to_boxes(self, labels, threshold = 0.5, offset=(0,0)):
+    @staticmethod
+    def labels_to_boxes(labels, grid_size, threshold = 0.5, offset=(0,0)):
         """ Function to convert yolo type model output to bounding boxes
         Parameters:
             labels:     [5:width:height] Tensor of predictions
@@ -124,7 +115,7 @@ class NaiveBoxDataset(CropDataset):
         scores = labels[0].cpu().numpy()
         boxes[0] += np.arange(0, wi).reshape(-1,1) - boxes[2]/2
         boxes[1] += np.arange(0, hi).reshape(1,-1) - boxes[3]/2
-        boxes = boxes*self.grid_size
+        boxes = boxes*grid_size
         boxes[0] += offx
         boxes[1] += offy
         boxes = boxes.reshape((4,-1)).T
@@ -132,7 +123,90 @@ class NaiveBoxDataset(CropDataset):
         idx = (scores > threshold).nonzero()[0]
         return boxes[idx], scores[idx]
 
-class NaiveGridDataset(GridCropDataset, NaiveBoxDataset):
+class MultiAnchorDataset(CropDataset):
+    def __init__(self, imgname, lblname, scales=[1], anchors=[],**kwargs):
+        super().__init__(imgname, lblname, **kwargs)
+        self._anchors = self._init_anchors(scales, anchors)
+        self._boxes[:,0:2] = self._boxes[:,0:2] - self._boxes[:,2:4]/2
+
+    def _init_anchors(self, scales, anchors):
+        delta = self.anchors_delta(scales, anchors).reshape((-1,1,1,4))
+        w, h = self._w//self._grid_size, self._h//self._grid_size
+        anchors_grid = np.mgrid[0:w,0:h].transpose(1,2,0)
+        anchors_grid = np.concatenate((anchors_grid, np.zeros_like(anchors_grid)),-1)
+        anchors_grid = np.expand_dims(anchors_grid, axis=0)
+        # anchor_centers = np.reshape(np.mgrid[0:delta.shape[0], 0:w, 0:h].transpose(1,2,3,0).reshape(-1,3)[:,1:]+0.5, (delta.shape[0], w, h, 2))
+        return anchors_grid + delta
+
+    @staticmethod
+    def anchors_delta(scales, anchors):
+        """ Create set of anchors for single cell
+        Parameters:
+            scales: [scale: float, ...]
+            anchors: [(offset_x: float, offset_y: float, w_to_h_ration: float), ...]
+        Return:
+            corrections: ndarray([[delta_left, delta_top, width, height], ...])
+        """
+        corrections = []
+        anchors = [(0.,0.,1.)] + anchors
+        for s in scales:
+            for dx, dy, whr in anchors:
+                w = whr / math.sqrt(whr)
+                h = 1 / math.sqrt(whr)
+                corrections.append([0.5+s*(dx-w/2), 0.5+s*(dy-h/2), s*w, s*h])
+        return np.array(corrections)
+
+class YoloDataset(MultiAnchorDataset):
+    """ Concrete multianchor dataset that uses Yolo like
+    """
+    def __init__(self, imgname, lblname, window_overlap_threshold = .25, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
+        self._wot = window_overlap_threshold
+        self._ait = anchor_ignore_threshold
+        self._denominator = denominator
+        super().__init__(imgname, lblname, **kwargs)
+
+    def _get_labels(self, idx):
+        left_x, top_y = self._xys[idx]/self._grid_size
+        w, h = self._w//self._grid_size, self._h//self._grid_size
+        n_anchors = self._anchors.shape[0]
+        anchors = self._anchors.reshape(-1,4)
+        # centers = self._anchor_centers.reshape(-1,2)
+        labels = np.full(anchors.shape[0], -1.)
+        coordinates = np.zeros(4*anchors.shape[0])
+        xs, ys, ws, hs = np.split(coordinates, 4)
+        # Filter out boxes that overlap less than threshold with the window
+        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._wot]
+        boxes[:,0:2] = boxes[:,0:2] - [left_x, top_y]
+        iou_matrix = iou(anchors, boxes, denominator=self._denominator)
+        ignore_mask = (iou_matrix > self._ait).any(axis=-1)
+        labels[ignore_mask] = 0
+        match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
+        labels[match_idxs] = match_ious
+        labels = labels.reshape((n_anchors, w, h))
+        xs[match_idxs] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_idxs, 0])/anchors[match_idxs, 2]
+        ys[match_idxs] = (boxes[:,1] + boxes[:,3]/2- anchors[match_idxs, 1])/anchors[match_idxs, 3]
+        ws[match_idxs] = boxes[:,2]/anchors[match_idxs, 2]
+        hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 2]
+        coordinates = coordinates.reshape((4*n_anchors, w, h))
+        return np.concatenate((labels, coordinates))
+
+def anchors_delta(scales, aspects):
+    """ Create set of anchors for single cell
+    Parameters:
+        scales: [scale: float, ...]
+        aspects: [(width: int, height: int), ...]
+    Return:
+        corrections: ndarray([[delta_left, delta_top, width, height], ...])
+    """
+    corrections = []
+    for s in scales:
+        for wa, ha in aspects:
+            w = s * wa / math.sqrt(wa*ha)
+            h = s * ha / math.sqrt(wa*ha)
+            corrections.append([(1-w)/2, (1-h)/2, w, h])
+    return np.array(corrections)
+
+class NaiveGridDataset(NaiveBoxDataset):
     """ Simple dataset class to be used in pytorch
     Takes:
         data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
@@ -150,9 +224,10 @@ class NaiveGridDataset(GridCropDataset, NaiveBoxDataset):
     window more than ignore_thresh the window is skipped, if any nucleus box overlaps window
     less than nuc_thresh window is also ignored, windows without any nuclei ignored as well
     """
-    pass
+    def __init__(self, imgname, lblname, **kwargs):
+        super().__init__(imgname, lblname, sample='grid', **kwargs)
 
-class NaiveRandomDataset(RandomCropDataset, NaiveBoxDataset):
+class NaiveRandomDataset(NaiveBoxDataset):
     """ Simple dataset class to be used in pytorch
     Takes:
         data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
@@ -166,7 +241,8 @@ class NaiveRandomDataset(RandomCropDataset, NaiveBoxDataset):
     Return:
         Dataset instance
     """
-    pass
+    def __init__(self, imgname, lblname, **kwargs):
+        super().__init__(imgname, lblname, sample='random', **kwargs)
 
 YoloGridDataset = NaiveGridDataset
 
