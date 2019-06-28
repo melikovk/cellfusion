@@ -36,7 +36,7 @@ class CropDataset(Dataset):
         with open(lblname, 'r') as f:
             boxes = json.load(f)
         self._boxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])/grid_size
-        self._boxes[:,0:2] = self._boxes[:,0:2] + self._boxes[:,2:4]/2
+        self._boxes[:,:2] = self._boxes[:,:2] + self._boxes[:,2:]/2
         self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
 
     def _init_coordinates(self,sample, length, seed, stride):
@@ -84,14 +84,19 @@ class NaiveBoxDataset(CropDataset):
     def _get_labels(self, idx):
         x, y = self._xys[idx]/self._grid_size
         labels = np.zeros((5, self._w//self._grid_size, self._h//self._grid_size))
-        boxes = self._boxes[centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes, lt_anchor='center')].reshape(-1,4)
-        boxes[:,0:2] = boxes[:,0:2] - [x, y]
+        boxes = self._get_boxes(idx)
         for box in boxes:
             xbox, ybox, wbox, hbox = box
             xidx, yidx = int(np.floor(xbox)), int(np.floor(ybox))
             xpos, ypos = xbox - xidx, ybox - yidx
             labels[:, xidx, yidx] = [1, xpos, ypos, wbox, hbox]
         return labels
+
+    def _get_boxes(self, idx):
+        x, y = self._xys[idx]/self._grid_size
+        boxes = self._boxes[centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes, lt_anchor='center')].reshape(-1,4)
+        boxes[:,0:2] = boxes[:,0:2] - [x, y]
+        return boxes
 
     @staticmethod
     def labels_to_boxes(labels, grid_size, threshold = 0.5, offset=(0,0)):
@@ -127,7 +132,7 @@ class MultiAnchorDataset(CropDataset):
     def __init__(self, imgname, lblname, scales=[1], anchors=[],**kwargs):
         super().__init__(imgname, lblname, **kwargs)
         self._anchors = self._init_anchors(scales, anchors)
-        self._boxes[:,0:2] = self._boxes[:,0:2] - self._boxes[:,2:4]/2
+        self._boxes[:,:2] = self._boxes[:,:2] - self._boxes[:,2:]/2
 
     def _init_anchors(self, scales, anchors):
         delta = self.anchors_delta(scales, anchors).reshape((-1,1,1,4))
@@ -165,30 +170,74 @@ class YoloDataset(MultiAnchorDataset):
         self._denominator = denominator
         super().__init__(imgname, lblname, **kwargs)
 
-    def _get_labels(self, idx):
+    def _get_boxes(self, idx):
         left_x, top_y = self._xys[idx]/self._grid_size
+        w, h = self._w//self._grid_size, self._h//self._grid_size
+        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._wot]
+        boxes[:,0:2] = boxes[:,0:2] - [left_x, top_y]
+        return boxes
+
+    def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
         n_anchors = self._anchors.shape[0]
         anchors = self._anchors.reshape(-1,4)
-        # centers = self._anchor_centers.reshape(-1,2)
         labels = np.full(anchors.shape[0], -1.)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
         # Filter out boxes that overlap less than threshold with the window
-        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._wot]
-        boxes[:,0:2] = boxes[:,0:2] - [left_x, top_y]
+        boxes = self._get_boxes(idx)
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         ignore_mask = (iou_matrix > self._ait).any(axis=-1)
         labels[ignore_mask] = 0
         match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
-        labels[match_idxs] = match_ious
+        labels[match_idxs] = 1
         labels = labels.reshape((n_anchors, w, h))
         xs[match_idxs] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_idxs, 0])/anchors[match_idxs, 2]
-        ys[match_idxs] = (boxes[:,1] + boxes[:,3]/2- anchors[match_idxs, 1])/anchors[match_idxs, 3]
+        ys[match_idxs] = (boxes[:,1] + boxes[:,3]/2 - anchors[match_idxs, 1])/anchors[match_idxs, 3]
         ws[match_idxs] = boxes[:,2]/anchors[match_idxs, 2]
-        hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 2]
+        hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 3]
         coordinates = coordinates.reshape((4*n_anchors, w, h))
         return np.concatenate((labels, coordinates))
+
+    @staticmethod
+    def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,0)):
+        """ Function to convert object loacalization model output to bounding boxes
+        Parameters:
+            labels:     [5*n_anchors:width:height] Tensor of predictions
+                        1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
+                        all dimensions are normalized to grid_size
+            grid_size:  Size of the model grid
+            offset:     offset of the crop in the image for multicrop predictions (in pixels)
+            threshold:  Pobj threshold to use
+            cell_anchors: ndarray with anchors for single grid cell
+                          should be the same as the one used to train the model
+        Returns:
+            (ndarray(Xlt,Ylt,W,H), ndarray(Pobj)) all coordinates are float values in pixels
+        """
+        if isinstance(offset, int):
+            offx = offy = offset
+        else:
+            offx, offy = offset
+        _, w, h = labels.shape
+        # Create grid of all anchors
+        anchors_grid = np.mgrid[0:w,0:h]
+        anchors_grid = np.concatenate((anchors_grid, np.zeros_like(anchors_grid)))
+        anchors_grid = np.expand_dims(anchors_grid, axis=1)
+        anchors_grid = anchors_grid + cell_anchors.T.reshape((4,-1,1,1))
+        anchors_grid = anchors_grid.reshape((4,-1))
+        # Select booxes
+        labels = labels.cpu().numpy().reshape((5, -1))
+        idx = (labels[0] > threshold).nonzero()[0]
+        scores = labels[0, idx]
+        boxes = labels[1:,idx]
+        anchors_grid = anchors_grid[:,idx]
+        # Recalculate box sizes and positions
+        boxes[:2] = (boxes[:2] - boxes[-2:]/2) * anchors_grid[-2:] + anchors_grid[:2]
+        boxes[-2:] = boxes[-2:] * anchors_grid[-2:]
+        boxes = boxes*grid_size
+        boxes[0] += offx
+        boxes[1] += offy
+        return boxes.T, scores
 
 def anchors_delta(scales, aspects):
     """ Create set of anchors for single cell
