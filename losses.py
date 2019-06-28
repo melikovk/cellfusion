@@ -13,12 +13,12 @@ def yolo_loss(predict, target, reduction='mean'):
     return {'loss': loss}
 
 def object_detection_loss(predict, target, reduction='mean', confidence_loss = 'crossentropy',
-    confidence_output = 'logits', size_transform = 'log', localization_weight = 1):
+    confidence_output = 'logits', size_transform = 'log', localization_weight = 1, eps = 1e-5):
     """ Loss function for object detection for dense grid of predictions such
     as in YOLO and SSD detectors. Single anchor per grid cell.
     Parameters:
-        predict: (batch_size, 5, h, w) 4D Tensor of predictions
-        target:  (batch_size, 5, h, w) 4D Tensor of ground truth boxes
+        predict: (batch_size, 5xNAnchors, h, w) 4D Tensor of predictions
+        target:  (batch_size, 5xNAnchors, h, w) 4D Tensor of ground truth boxes
         reduction: {'mean'|'sum'} sum or average over the batch
         confidence_loss: {'crossentropy'|'mse'}
         confidence_output: {'logits'|'probability'}
@@ -27,32 +27,35 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
                              before summing with confidence loss
                              default = 1
     Returns:
-        (total_loss, {'confidence_loss':confidence_loss, 'localization_loss':localization_loss})
+        {'loss': total_loss, 'confidence_loss':confidence_loss, 'localization_loss':localization_loss}
     """
-    eps = torch.tensor(1e-5).to(target.device)
+    eps = torch.tensor(eps).to(target.device)
+    batch_size, _, w, h = predict.shape
+    predict = predict.reshape(batch_size, 5, -1, w, h)
+    target = target.reshape(batch_size, 5, -1, w, h)
     if confidence_output == 'logits':
         if confidence_loss == 'crossentropy':
-            loss_conf = F.binary_cross_entropy_with_logits(predict[:,0,:,:], target[:,0,:,:], reduction='sum')
+            loss_conf = F.binary_cross_entropy_with_logits(predict[:,0,...], target[:,0,...], reduction='sum')
         elif confidence_loss == 'mse':
-            loss_conf = F.mse_loss(torch.sigmoid(predict[:,0,:,:]), target[:,0,:,:], reduction='sum')
+            loss_conf = F.mse_loss(torch.sigmoid(predict[:,0,...]), target[:,0,...], reduction='sum')
         else:
             raise ValueError("confidence_loss should be 'crossentropy' or 'mse'")
     elif confidence_output == 'probability':
         if confidence_loss == 'crossentropy':
-            loss_conf = F.binary_cross_entropy(predict[:,0,:,:], target[:,0,:,:], reduction='sum')
+            loss_conf = F.binary_cross_entropy(predict[:,0,...], target[:,0,...], reduction='sum')
         elif confidence_loss == 'mse':
-            loss_conf = F.mse_loss(predict[:,0,:,:], target[:,0,:,:], reduction='sum')
+            loss_conf = F.mse_loss(predict[:,0,...], target[:,0,...], reduction='sum')
         else:
             raise ValueError("confidence_loss should be 'crossentropy' or 'mse'")
     else:
         raise ValueError("confidence_output should be 'logits' or 'probability'")
-    loss_box = F.mse_loss(predict[:,1:3,:,:]*target[:,0:1,:,:], target[:,1:3,:,:]*target[:,0:1,:,:], reduction='sum')
+    loss_box = F.mse_loss(predict[:,1:3,...]*target[:,0:1,...], target[:,1:3,...]*target[:,0:1,...], reduction='sum')
     if size_transform == 'log':
-        loss_box += F.mse_loss(predict[:,3:,:,:].log()*target[:,0:1,:,:], target[:,3:,:,:].max(eps).log()*target[:,0:1,:,:], reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,...].log()*target[:,0:1,...], target[:,3:,...].max(eps).log()*target[:,0:1,...], reduction='sum')
     elif size_transform == 'sqrt':
-        loss_box += F.mse_loss(predict[:,3:,:,:].sqrt()*target[:,0:1,:,:], target[:,3:,:,:].sqrt()*target[:,0:1,:,:], reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,...].sqrt()*target[:,0:1,...], target[:,3:,...].sqrt()*target[:,0:1,...], reduction='sum')
     elif size_transform == 'none':
-        loss_box += F.mse_loss(predict[:,3:,:,:]*target[:,0:1,:,:], target[:,3:,:,:]*target[:,0:1,:,:], reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,...]*target[:,0:1,...], target[:,3:,...]*target[:,0:1,...], reduction='sum')
     else:
         raise ValueError("size_transform should be 'log', 'sqrt' or 'none'")
     if reduction == 'mean':
