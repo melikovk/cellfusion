@@ -62,9 +62,9 @@ class ObjectDetectionHead(nn.Module):
         probability: {False | True} Return probability instead of logits (default is False)
         coordinate_transform: {hardtanh|sigmoid} transformation of box coordinate
     Ouputs:
-        5xHxWxB tensor of predictions
+        5*NAnchorsxHxWxB tensor of predictions
     """
-    def __init__(self, in_features, activation='relu', hidden_features=[1024, 1024],
+    def __init__(self, in_features, anchors = 1, activation='relu', hidden_features=[1024, 1024],
                  hidden_kernel=[3, 3], bn_args={'momentum':0.01}, act_args={},
                  probability=False, coordinate_transform = 'hardtanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
@@ -72,6 +72,7 @@ class ObjectDetectionHead(nn.Module):
         assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
             "coordinate_transform should be 'hardtanh' or 'sigmoid'"
         super().__init__()
+        self.anchors = anchors
         self.eps = eps
         self.conf_func = F.sigmoid if probability else lambda x: x
         if coordinate_transform == 'hardtanh':
@@ -85,12 +86,13 @@ class ObjectDetectionHead(nn.Module):
             self.add_module(f'conv2d_{i}', nn.Conv2d(hidden_features[i-1], hidden_features[i], hidden_kernel[i-1], padding = hidden_kernel[i-1]//2))
             self.add_module(f'bn_{i}', nn.BatchNorm2d(hidden_features[i], **bn_args))
             self.add_module(f'activ_{i}', _activation[activation](**act_args))
-        self.out = nn.Conv2d(hidden_features[-1], 5, 1)
+        self.out = nn.Conv2d(hidden_features[-1], 5*self.anchors, 1)
 
     def forward(self, x):
+        n = self.anchors
         for m in list(self.children()):
             x = m(x)
-        x = torch.cat([self.conf_func(x[:,:1,:,:]),self.coord_func(x[:,1:3,:,:]),torch.max(x[:,3:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
+        x = torch.cat([self.conf_func(x[:,:n,:,:]),self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
         return x
 
 class ObjectDetectionHeadSplit(nn.Module):
@@ -109,9 +111,9 @@ class ObjectDetectionHeadSplit(nn.Module):
         probability: {False | True} Return probability instead of logits (default is False)
         coordinate_transform: {hardtanh|sigmoid} transformation of box coordinate
     Ouputs:
-        5xHxWxB tensor of predictions
+        5*NAnchorsxHxWxB tensor of predictions
     """
-    def __init__(self, in_features, activation='relu', hidden_features=[256, 256, 256, 256],
+    def __init__(self, in_features, anchors=1, activation='relu', hidden_features=[256, 256, 256, 256],
                  hidden_kernel=[3, 3, 3, 3], bn_args={'momentum':0.01}, act_args={},
                  probability=False, coordinate_transform = 'hardtanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
@@ -120,6 +122,7 @@ class ObjectDetectionHeadSplit(nn.Module):
             "coordinate_transform should be 'hardtanh' or 'sigmoid'"
         super().__init__()
         self.eps = eps
+        self.anchors = anchors
         self.conf_func = F.sigmoid if probability else lambda x: x
         if coordinate_transform == 'hardtanh':
             self.coord_func = lambda x: F.hardtanh(x, min_val=0., max_val=1.)
@@ -133,21 +136,22 @@ class ObjectDetectionHeadSplit(nn.Module):
             object_subnet[f'conv2d_{i}'] = nn.Conv2d(hidden_features[i-1], hidden_features[i], hidden_kernel[i-1], padding = hidden_kernel[i-1]//2)
             object_subnet[f'bn_{i}'] = nn.BatchNorm2d(hidden_features[i], **bn_args)
             object_subnet[f'activ_{i}'] = _activation[activation](**act_args)
-        object_subnet['out'] = nn.Conv2d(hidden_features[-1], 1, 1)
+        object_subnet['out'] = nn.Conv2d(hidden_features[-1], self.anchors, 1)
         self.object_subnet = nn.Sequential(object_subnet)
         box_subnet = OrderedDict()
         for i in range(1, len(hidden_features)):
             box_subnet[f'conv2d_{i}'] = nn.Conv2d(hidden_features[i-1], hidden_features[i], hidden_kernel[i-1], padding = hidden_kernel[i-1]//2)
             box_subnet[f'bn_{i}'] = nn.BatchNorm2d(hidden_features[i], **bn_args)
             box_subnet[f'activ_{i}'] = _activation[activation](**act_args)
-        box_subnet['out'] = nn.Conv2d(hidden_features[-1], 4, 1)
+        box_subnet['out'] = nn.Conv2d(hidden_features[-1], 4*self.anchors, 1)
         self.box_subnet = nn.Sequential(box_subnet)
 
     def forward(self, x):
+        n = self.anchors
         x = self.activ0(self.bn0(x))
         x_obj = self.object_subnet(x)
         x_box = self.box_subnet(x)
-        x = torch.cat([self.conf_func(x_obj),self.coord_func(x_box[:,:2,:,:]),torch.max(x_box[:,2:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
+        x = torch.cat([self.conf_func(x_obj),self.coord_func(x_box[:,:2*n,:,:]),torch.max(x_box[:,2*n:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
         return x
 
 
