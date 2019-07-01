@@ -3,13 +3,13 @@ import os.path
 import torch
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from trainsession import TrainSession, class_accuracy, SessionSaver, iou_accuracy
+from trainsession import TrainSession, SessionSaver
 import numpy as np
 import torchvision.transforms as transforms
 import image.cv2transforms as cv2transforms
 from model_zoo import mobilenet_v2, cnn_heads
-from losses import yolo_loss, yolo1_loss, yolo2_loss, object_detection_loss
-from model_zoo.vision_models import CNNModel, saveboxes, localization_accuracy
+from losses import yolo1_loss, yolo2_loss, object_detection_loss
+from model_zoo.vision_models import CNNModel, saveboxes
 from image.datasets.yolo import YoloGridDataset, YoloRandomDataset, RandomLoader, labelsToBoxes
 from image.metrics.localization import precision_recall_f1_batch, precision_recall_meanIOU_batch
 from model_zoo import catalog
@@ -59,7 +59,6 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                            partial(object_detection_loss, confidence_loss = confidence_loss, size_transform=size_transform, localization_weight=localization_weight),
                            optim.Adam,
                            model.parameters(),
-                           # iou_accuracy,
                            partial(precision_recall_meanIOU_batch, labeltoboxesfunc = labelsToBoxes, iou_thresholds=[0.5, 0.7, 0.9]),
                            log_dir = logdir,
                            opt_defaults = {'lr':init_lr,'weight_decay':1e-5},

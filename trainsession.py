@@ -13,32 +13,6 @@ from skimage.transform import rescale
 
 autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
 
-def class_accuracy(outputs, labels):
-    _, preds = torch.max(outputs.detach(), 1)
-    return torch.sum(preds == labels.detach())
-
-@torch.no_grad()
-def iou_accuracy(outputs, labels):
-    """ Estimates intersection over union accuracy metrics
-    This is simplified function as id does not perform non-maximal supression
-    and will penalize if the wrong cell predicts correct bounding box
-    """
-    X = outputs
-    Y = labels
-    batch_size = X.size(0)
-    pboxes = torch.ge(torch.sigmoid(X[:,0,:,:]), 0.5)
-    count = torch.sum(pboxes)
-    ileft = torch.max(X[:,1,:,:]-X[:,3,:,:]/2, Y[:,1,:,:]-Y[:,3,:,:]/2)
-    iright = torch.min(X[:,1,:,:]+X[:,3,:,:]/2, Y[:,1,:,:]+Y[:,3,:,:]/2)
-    itop = torch.max(X[:,2,:,:]-X[:,4,:,:]/2, Y[:,2,:,:]-Y[:,4,:,:]/2)
-    ibottom = torch.min(X[:,2,:,:]+X[:,4,:,:]/2, Y[:,2,:,:]+Y[:,4,:,:]/2)
-    iwidths = torch.max(iright-ileft, torch.zeros_like(ileft))
-    iheights = torch.max(ibottom-itop, torch.zeros_like(itop))
-    iareas = iwidths*iheights*pboxes.float()
-    uareas = X[:,3,:,:]*X[:,4,:,:] + Y[:,3,:,:]*Y[:,4,:,:] - iareas
-    # We need to multiply by batch_size since this is an effective weight of the accuracy measurement
-    return torch.sum(iareas/uareas)/count*batch_size if count.item() > 0 else torch.tensor(0)
-
 def predict_nuclei(image, model, grid_size = 32, conf_threshold = 0.5, iou_threshold = 0.8, offset= (0,0), transform = autocontrast):
     if isinstance(image, str):
         img = io.imread(image).T

@@ -3,15 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 
-def yolo_loss(predict, target, reduction='mean'):
-    loss_conf = F.mse_loss(predict[:,0,:,:], target[:,0,:,:], reduction='sum')
-    loss_box = F.mse_loss(predict[:,1:,:,:]*target[:,0:1,:,:], target[:,1:,:,:]*target[:,0:1,:,:], reduction='sum')
-    if reduction == 'mean':
-        loss = (loss_conf+loss_box)/target.shape[0]
-    else:
-        loss = (loss_conf+loss_box)
-    return {'loss': loss}
-
 def object_detection_loss(predict, target, reduction='mean', confidence_loss = 'crossentropy',
     confidence_output = 'logits', size_transform = 'log', localization_weight = 1):
     """ Loss function for object detection for dense grid of predictions such
@@ -40,7 +31,6 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     if confidence_output == 'logits':
         if confidence_loss == 'crossentropy':
             loss_conf = F.binary_cross_entropy_with_logits(torch.masked_select(predict[:,0,...], object_mask), torch.masked_select(target[:,0,...], object_mask), reduction='sum')
-            # loss_conf = F.binary_cross_entropy_with_logits(predict[:,0,...].reshape(-1), target[:,0,...].reshape(-1), reduction='sum')
         elif confidence_loss == 'mse':
             loss_conf = F.mse_loss(torch.sigmoid(torch.masked_select(predict[:,0,...], object_mask)), torch.masked_select(target[:,0,...], object_mask), reduction='sum')
         else:

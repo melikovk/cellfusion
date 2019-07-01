@@ -11,7 +11,6 @@ import os.path
 from typing import List, Tuple, NewType
 import torch
 from torch.utils.data import Dataset
-# from tensorflow.keras.utils import Sequence
 from .metrics.localization import iou
 
 NUCLEUS = 0
@@ -21,51 +20,6 @@ FUSION = 1
 NOFUSION = 0
 
 Rect = Tuple[int,int,int,int]
-
-class CropDataset(Dataset):
-    """ Simple dataset class to be used in pytorch
-    Takes:
-        data: Tuple(imgs, labels)
-                imgs is a numpy array withh all image crops
-                labels - numpy array with corresponding class labels
-        transform: callable object to transform each image
-    Return:
-        Dataset instance
-    """
-    def __init__(self, imgs, labels=None, transforms=None):
-        self.imgs = imgs
-        self.labels = labels
-        self.transforms = transforms
-
-    def __len__(self):
-        return len(self.imgs)
-
-    def __getitem__(self, idx):
-        if self.transforms is not None:
-            if type(idx) is slice:
-                start = 0 if idx.start is None else idx.start
-                stop =  len(self.imgs) if idx.stop is None else idx.stop
-                step = 1 if idx.step is None else idx.step
-                imgs = np.stack([self.transforms(self.imgs[i]) for i in range(start, stop, step)], axis=0)
-            else:
-                imgs = self.transforms(self.imgs[idx])
-        else:
-            imgs = self.imgs[idx]
-        if self.labels is None:
-            return imgs
-        else:
-            return (imgs, self.labels[idx])
-
-# class CropSequence(Sequence):
-#     def __init__(self, data, batch_size):
-#         self.dataset = CropDataset(data)
-#         self.batch_size = batch_size
-#
-#     def __len__(self):
-#         return len(self.dataset)//self.batch_size
-#
-#     def __getitem__(self, idx):
-#         return self.dataset[idx * self.batch_size:(idx + 1) * self.batch_size]
 
 def getCropBox(box: Tuple, size: int, bsize: int, imgsize: Tuple)->Tuple:
     """ Returns a crop box around the region of interest (ROI)

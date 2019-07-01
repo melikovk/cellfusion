@@ -1,5 +1,6 @@
 import json
 import numpy as np
+from PIL import Image
 import skimage.io as io
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from ..utils import centerinside
@@ -27,7 +28,7 @@ class CropDataset(Dataset):
     """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
     def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, sample='random', length = None, seed=None, stride=None):
-        self._img = io.imread(imgname).T
+        self._img = Image.open(imgname)
         self._w, self._h = win_size
         self._grid_size = grid_size
         self._border_size = border_size
@@ -43,18 +44,19 @@ class CropDataset(Dataset):
         if sample == 'random':
             self._seed = seed
             if length is None:
-                length = self._img.shape[-1]*self._img.shape[-2] // (self._w*self._h)
+                length = self._img.size[-1]*self._img.size[-2] // (self._w*self._h)
             if self._seed is not None:
                 np.random.seed(self._seed)
-            xs = np.random.randint(self._border_size, self._img.shape[-2]-self._border_size-self._w, length)
-            ys = np.random.randint(self._border_size, self._img.shape[-1]-self._border_size-self._h, length)
+            xs = np.random.randint(self._border_size, self._img.size[-2]-self._border_size-self._w, length)
+            ys = np.random.randint(self._border_size, self._img.size[-1]-self._border_size-self._h, length)
+
             return np.stack((xs,ys), axis=-1)
         elif sample == 'grid':
             self._seed = 0
             if stride is None:
                 stride = (self._w, self._h)
-            xrange = np.arange(self._border_size, self._img.shape[-2] - self._border_size - self._w, stride[0])
-            yrange = np.arange(self._border_size, self._img.shape[-1] - self._border_size - self._h, stride[1])
+            xrange = np.arange(self._border_size, self._img.size[-2] - self._border_size - self._w, stride[0])
+            yrange = np.arange(self._border_size, self._img.size[-1] - self._border_size - self._h, stride[1])
             return np.stack(np.meshgrid(xrange, yrange, indexing = 'ij')).reshape(2,-1).T
 
 
@@ -66,7 +68,7 @@ class CropDataset(Dataset):
 
     def __getitem__(self, idx):
         x, y = self._xys[idx]
-        img = self._img[x:x+self._w, y:y+self._h]
+        img = np.asarray(self._img.crop((x, y, x+self._w, y+self._h)))
         if self._transforms is not None:
             img = self._transforms(img)
         labels = self._get_labels(idx).astype(np.float32)
