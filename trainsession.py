@@ -6,7 +6,7 @@ from collections import OrderedDict, defaultdict
 from tensorboardX import SummaryWriter
 import skimage.io as io
 import numpy as np
-from image.datasets.yolo import labelsToBoxes
+from image.datasets.yolo import labels_to_boxes, get_cell_anchors
 from image.metrics.localization import nms
 from image.cv2transforms import AutoContrast, Gamma
 from skimage.transform import rescale
@@ -26,7 +26,7 @@ def predict_nuclei(image, model, grid_size = 32, conf_threshold = 0.5, iou_thres
     device = next(model.parameters()).device
     input = torch.from_numpy(transform(img).reshape((1, -1, w, h))).to(device)
     labels = model(input).detach().cpu().squeeze()
-    boxes, scores = labelsToBoxes(labels, grid_size = grid_size, offset = offset, threshold = conf_threshold)
+    boxes, scores = labels_to_boxes(labels, grid_size = grid_size, cell_anchors = get_cell_anchors([1],[]), offset = offset, threshold = conf_threshold)
     boxes = torch.tensor(boxes)
     scores = torch.tensor(scores)
     idxs = nms(boxes, scores, iou_threshold)

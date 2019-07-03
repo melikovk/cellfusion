@@ -6,9 +6,9 @@ from collections import OrderedDict
 def object_detection_loss(predict, target, reduction='mean', confidence_loss = 'crossentropy',
     confidence_output = 'logits', size_transform = 'log', localization_weight = 1):
     """ Loss function for object detection for dense grid of predictions such
-    as in YOLO and SSD detectors. Single anchor per grid cell. Predictions are assumed to be
-    groupped in the following way : objectness score's for all anchors, x's for all anchors,
-    y's for all anchors followed by w's and h's for all anchors. Function ignores target anchors
+    as in YOLO and SSD detectors. Predictions are assumed to be groupped in the following way :
+    objectness score's for all anchors, x's for all anchors, y's for all anchors
+    followed by w's and h's for all anchors. Function ignores target anchors
     with negative scores, allowing setting anchor boxes in the target to -1 to be ignored
     in calculation of loss (both objectness and box coordinates)
     Parameters:
