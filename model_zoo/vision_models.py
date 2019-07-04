@@ -5,6 +5,9 @@ import torch.nn.functional as F
 from collections import OrderedDict
 from image.metrics.localization import iou
 import json
+from inspect import signature
+from image.datasets.yolo import labels_to_boxes
+import math
 
 NUCLEUS = 0
 BKG = 1
@@ -12,15 +15,47 @@ IGNORE = 2
 FUSION = 1
 NOFUSION = 0
 
-class CNNModel(nn.Module):
-
-    def __init__(self, features, head):
+class ObjectDetectionModel(nn.Module):
+    """ Dense grid prediction based (Yolo and SSD like) object detection model
+    Takes class object of feature and head models and dicts with
+    corresponding configuration parameters
+    """
+    def __init__(self, features_model, head_model, features_config, head_config, cell_anchors, size_transform='log'):
         super().__init__()
-        self.features = features
-        self.head = head
+        self.features = features_model(**features_config)
+        self.head = head_model(**head_config)
+        self.features_config = features_config
+        self.head_config = head_config
+        self.cell_anchors = cell_anchors
+        self.size_transform = size_transform
 
     def forward(self, x):
         return self.head(self.features(x))
+
+    @torch.no_grad()
+    def get_prediction(self, x, threshold = 0.5):
+        """ Get prediction form network output
+        """
+        n = self.cell_anchors.shape[0]
+        logit_threshold = math.log(threshold/(1-threshold))
+        if self.size_transform == 'log':
+            x[:,-2*n:,...] = x[:,-2*n:,...].exp()
+        elif self.size_transform == 'sqrt':
+            x[:,-2*n:,...] = x[:,-2*n:,...].pow(2)
+        return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors, threshold = logit_threshold)
+
+    @torch.no_grad()
+    def predict(self, x):
+        """ Get prediction from image or batch of images
+        """
+        return self.get_prediction(self.forward(x))
+
+    def get_targets(self, x):
+        """ Get targets from labels Tensor
+        """
+        return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors)
+
+
 
 def saveboxes(fpath, boxes, scores):
     """Saves location bounding boxes to json file

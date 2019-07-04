@@ -33,7 +33,7 @@ def mobilenet_v2_1ch_object_detect_base():
     """
     features_params = _features_params.copy()
     head_params = _head_params.copy()
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
+    model = vision_models.ObjectDetectionModel(mobilenet_v2.MobileNetV2, cnn_heads.ObjectDetectionHead, features_params, head_params)
     return model
 
 def mobilenet_v2_1ch_object_detect_split_base():
@@ -43,7 +43,7 @@ def mobilenet_v2_1ch_object_detect_split_base():
     """
     features_params = _features_params.copy()
     head_params = _split_head_params.copy()
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHeadSplit(**head_params))
+    model = vision_models.ObjectDetectionModel(mobilenet_v2.MobileNetV2, cnn_heads.ObjectDetectionHeadSplit, features_params, head_params)
     return model
 
 def mobilenet_v2_1ch_object_detect_full():
@@ -56,7 +56,7 @@ def mobilenet_v2_1ch_object_detect_full():
     head_params = _head_params.copy()
     features_params['out_channels'] = (48,24,36,48,96,144,240,480)
     head_params['in_features'] = 480
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
+    model = vision_models.ObjectDetectionModel(mobilenet_v2.MobileNetV2, cnn_heads.ObjectDetectionHead, features_params, head_params)
     return model
 
 def mobilenet_v2_1ch_object_detect_shrink():
@@ -67,7 +67,7 @@ def mobilenet_v2_1ch_object_detect_shrink():
     features_params = _features_params.copy()
     head_params = _head_params.copy()
     features_params['expansions'] = (1,3,3,3,3,3,3)
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
+    model = vision_models.ObjectDetectionModel(mobilenet_v2.MobileNetV2, cnn_heads.ObjectDetectionHead, features_params, head_params)
     return model
 
 def mobilenet_v2_1ch_object_detect_deep():
@@ -79,5 +79,5 @@ def mobilenet_v2_1ch_object_detect_deep():
     features_params = _features_params.copy()
     head_params = _head_params.copy()
     features_params['repeats'] = (2,4,6,8,6,6,2)
-    model = vision_models.CNNModel(mobilenet_v2.MobileNetV2(**features_params), cnn_heads.ObjectDetectionHead(**head_params))
+    model = vision_models.ObjectDetectionModel(mobilenet_v2.MobileNetV2, cnn_heads.ObjectDetectionHead, features_params, head_params)
     return model

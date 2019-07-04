@@ -196,7 +196,8 @@ def get_grid_anchors(cell_anchors, w, h):
 def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,0)):
     """ Function to convert object loacalization model output to bounding boxes
     Parameters:
-        labels:     [5*n_anchors:width:height] Tensor of predictions
+        labels:     [5*n_anchors:width:height] or
+                    [Batch_size:5*n_anchors:width:height] Tensor of predictions
                     1st dimension stores [Pobj:Xcenter:Ycenter:W:H]
                     all dimensions are normalized to grid_size
         grid_size:  Size of the model grid
@@ -207,7 +208,10 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
                       should be the same as the one used to train the model
     Returns:
         (ndarray(Xlt,Ylt,W,H), ndarray(Pobj)) all coordinates are float values in pixels
+        if given batch return list of the predictions for each image
     """
+    if len(labels.shape) == 4:
+        return [labels_to_boxes(img, grid_size,cell_anchors, threshold, offset) for img in labels]
     if isinstance(offset, int):
         offx = offy = offset
     else:

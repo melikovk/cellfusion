@@ -108,22 +108,20 @@ class ObjectDetectionHeadSplit(nn.Module):
         hidden_kernel: [int] - size of kernel for Conv2d layers
         bn_arg: dict - BatchNorm2d parameters
         act_args: dict - Activation layers parameters
-        probability: {False | True} Return probability instead of logits (default is False)
         coordinate_transform: {hardtanh|sigmoid} transformation of box coordinate
     Ouputs:
         5*NAnchorsxHxWxB tensor of predictions
     """
     def __init__(self, in_features, anchors=1, activation='relu', hidden_features=[256, 256, 256, 256],
                  hidden_kernel=[3, 3, 3, 3], bn_args={'momentum':0.01}, act_args={},
-                 probability=False, coordinate_transform = 'hardtanh', eps = 1e-5):
+                 coordinate_transform = 'hardtanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
             "You should provide kernel_size for each hidden convolutional layer"
         assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
             "coordinate_transform should be 'hardtanh' or 'sigmoid'"
         super().__init__()
-        self.eps = eps
+        self.eps = torch.tensor(eps)
         self.anchors = anchors
-        self.conf_func = F.sigmoid if probability else lambda x: x
         if coordinate_transform == 'hardtanh':
             self.coord_func = lambda x: F.hardtanh(x, min_val=0., max_val=1.)
         else:
@@ -151,7 +149,7 @@ class ObjectDetectionHeadSplit(nn.Module):
         x = self.activ0(self.bn0(x))
         x_obj = self.object_subnet(x)
         x_box = self.box_subnet(x)
-        x = torch.cat([self.conf_func(x_obj),self.coord_func(x_box[:,:2*n,:,:]),torch.max(x_box[:,2*n:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
+        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps.to(x.device))], dim = 1)
         return x
 
 

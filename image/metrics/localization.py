@@ -372,20 +372,18 @@ def nms(boxes, scores, iou_threshold):
     else:
         return keep_idx[:n]
 
-def precision_recall_f1_batch(predict, target, labeltoboxesfunc, iou_thresholds, nms_threshold = 0.8, score_threshold = 0.5):
+def precision_recall_f1(predict, target, iou_thresholds, nms_threshold = 0.8):
     """ Calculates precision, recall and F1 score on a batch of predictions.
-
-
     """
-
-    assert predict.shape == target.shape, \
-        "predict and target Tensor should have same shape"
+    if isinstance(predict, list):
+        assert isinstance(target, list) and len(predict) == len(target), \
+            "If predict and target are lists theshould have same length"
+    else:
+        predict, target = [predict], [target]
     counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
-    predict = predict.cpu().numpy()
-    target = target.cpu().numpy()
-    for img in range(predict.shape[0]):
-        pboxes, pscores = labeltoboxesfunc(predict[img], threshold=score_threshold)
-        tboxes, tscores = labeltoboxesfunc(target[img], threshold=score_threshold)
+    for i in range(len(predict)):
+        pboxes, pscores = predict[i]
+        tboxes, tscores = target[i]
         tboxes = tboxes[nms(tboxes, tscores,.95)]
         pboxes = pboxes[nms(pboxes, pscores, nms_threshold)]
         for i, thresh in enumerate(iou_thresholds):
@@ -398,16 +396,17 @@ def precision_recall_f1_batch(predict, target, labeltoboxesfunc, iou_thresholds,
         results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if tp+fn !=0 else 0
     return results
 
-def precision_recall_meanIOU_batch(predict, target, labeltoboxesfunc, iou_thresholds, nms_threshold = 0.8, score_threshold = 0.5):
-    assert predict.shape == target.shape, \
-        "predict and target Tensor should have same shape"
+def precision_recall_meanIOU(predict, target, iou_thresholds, nms_threshold = 0.8):
+    if isinstance(predict, list):
+        assert isinstance(target, list) and len(predict) == len(target), \
+            "If predict and target are lists theshould have same length"
+    else:
+        predict, target = [predict], [target]
     counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
     ious = []
-    predict = predict.cpu().numpy()
-    target = target.cpu().numpy()
-    for img in range(predict.shape[0]):
-        pboxes, pscores = labeltoboxesfunc(predict[img], threshold=score_threshold)
-        tboxes, tscores = labeltoboxesfunc(target[img], threshold=score_threshold)
+    for i in range(len(predict)):
+        pboxes, pscores = predict[i]
+        tboxes, tscores = target[i]
         tboxes = tboxes[nms(tboxes, tscores,.95)]
         pboxes = pboxes[nms(pboxes, pscores, nms_threshold)]
         if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:

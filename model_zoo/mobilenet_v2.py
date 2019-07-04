@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from collections import OrderedDict
+import numpy as np
 
 class Bottleneck(nn.Module):
 
@@ -49,6 +50,7 @@ class MobileNetV2(nn.Module):
 
     def __init__(self, in_channels, out_channels=(32,16,24,32,64,96,160,320), repeats=(1,2,3,4,3,3,1), strides=(1,2,2,2,1,2,1), expansions=(1,6,6,6,6,6,6), bn_momentum=.01):
         super().__init__()
+        self.grid_size = np.prod(strides)*2
         self.conv_init = nn.Conv2d(in_channels, out_channels[0], 3, stride=2, padding=1)
         for i in range(len(expansions)):
             self.add_module(f'block_{i+1}',Block(out_channels[i], out_channels[i+1], repeats[i], strides[i], expansions[i], bn_momentum))

@@ -160,7 +160,7 @@ class TrainSession:
             for k, v in batch_loss.items():
                 loss[k] += v.item() * inputs.size(0)
             # accuracy += self.acc_func(outputs, labels).item()
-            batch_acc = self.acc_func(outputs, labels)
+            batch_acc = self.acc_func(self.model.get_prediction(outputs), self.model.get_targets(labels))
             for k, v in batch_acc.items():
                 accuracy[k] += v * inputs.size(0)
             size += inputs.size(0)
@@ -195,7 +195,7 @@ class TrainSession:
                     train_loss[k] += v.item() * inputs.size(0)
                 # train_acc += self.acc_func(outputs, labels).item()
                 with torch.no_grad():
-                    batch_acc = self.acc_func(outputs, labels)
+                    batch_acc = self.acc_func(self.model.get_prediction(outputs), self.model.get_targets(labels))
                 for k, v in batch_acc.items():
                     train_acc[k] += v * inputs.size(0)
                 size += inputs.size(0)

@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 import image.cv2transforms as cv2transforms
 from model_zoo import mobilenet_v2, cnn_heads
 from losses import yolo1_loss, yolo2_loss, object_detection_loss
-from model_zoo.vision_models import CNNModel, saveboxes
+from model_zoo.vision_models import ObjectDetectionModel, saveboxes
 from image.datasets.yolo import YoloGridDataset, YoloRandomDataset, RandomLoader, labels_to_boxes, get_cell_anchors
 from image.metrics.localization import precision_recall_f1_batch, precision_recall_meanIOU_batch
 from model_zoo import catalog
