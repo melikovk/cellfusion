@@ -39,7 +39,7 @@ class CropDataset(Dataset):
         # self._boxes[:,:2] = self._boxes[:,:2] + self._boxes[:,2:]/2
         self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
 
-    def _init_coordinates(self,sample, length, seed, stride):
+    def _init_coordinates(self, sample, length, seed, stride):
         if sample == 'random':
             self._seed = seed
             if length is None:
@@ -75,7 +75,7 @@ class CropDataset(Dataset):
 
     def reset(self):
         if self._seed is None:
-            self._xys = self._init_coordinates(self._xys.shape[0])
+            self._xys = self._init_coordinates(sample='random', length=self._xys.shape[0], seed=None, stride=None)
 
 class NaiveBoxDataset(CropDataset):
     """ Simple dataset class to be used in pytorch
@@ -114,31 +114,29 @@ class NaiveBoxDataset(CropDataset):
         return boxes
 
 class MultiAnchorDataset(CropDataset):
-    def __init__(self, imgname, lblname, scales=[1], anchors=[],**kwargs):
+    def __init__(self, imgname, lblname, cell_anchors, window_overlap_threshold = .25, **kwargs):
         super().__init__(imgname, lblname, **kwargs)
-        self._cell_anchors = get_cell_anchors(scales, anchors)
-        # self._anchors = self._init_anchors()
+        self._cell_anchors = cell_anchors
+        self._window_thresh = window_overlap_threshold
         self._anchors = get_grid_anchors(self._cell_anchors, self._w/self._grid_size, self._h/self._grid_size).transpose(1,2,3,0)
-        # self._boxes[:,:2] = self._boxes[:,:2] - self._boxes[:,2:]/2
-
-class YoloDataset(MultiAnchorDataset):
-    """ Concrete multianchor dataset that uses Yolo like box assignement. We assign
-    only each box to only one anchor (anchor with highest iou with the box) and
-    set ignore label (-1 for objectness) for anchors that have iou higher than specified threshold
-    with any true box.
-    """
-    def __init__(self, imgname, lblname, window_overlap_threshold = .25, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
-        self._wot = window_overlap_threshold
-        self._ait = anchor_ignore_threshold
-        self._denominator = denominator
-        super().__init__(imgname, lblname, **kwargs)
 
     def _get_boxes(self, idx):
         left_x, top_y = self._xys[idx]/self._grid_size
         w, h = self._w//self._grid_size, self._h//self._grid_size
-        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._wot]
+        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._window_thresh]
         boxes[:,0:2] = boxes[:,0:2] - [left_x, top_y]
         return boxes
+
+class YoloDataset(MultiAnchorDataset):
+    """ Concrete multianchor dataset that uses Yolo like box assignement. We assign
+    each box to only one anchor (anchor with highest iou with the box) and
+    set ignore label (-1 for objectness) for anchors that have iou higher than specified threshold
+    with any true box.
+    """
+    def __init__(self, imgname, lblname, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
+        self._ignore_thresh = anchor_ignore_threshold
+        self._denominator = denominator
+        super().__init__(imgname, lblname, **kwargs)
 
     def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
@@ -150,15 +148,63 @@ class YoloDataset(MultiAnchorDataset):
         # Filter out boxes that overlap less than threshold with the window
         boxes = self._get_boxes(idx)
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
-        ignore_mask = (iou_matrix > self._ait).any(axis=-1)
+        ignore_mask = (iou_matrix > self._ignore_thresh).any(axis=-1)
         labels[ignore_mask] = -1.0
+        # Set labels for anchors that have maximum IOU with true boxes to 1.0
         match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
         labels[match_idxs] = 1.0
+        # Remaining anchors are background boxes
         labels = labels.reshape((n_anchors, w, h))
         xs[match_idxs] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_idxs, 0])/anchors[match_idxs, 2]
         ys[match_idxs] = (boxes[:,1] + boxes[:,3]/2 - anchors[match_idxs, 1])/anchors[match_idxs, 3]
         ws[match_idxs] = boxes[:,2]/anchors[match_idxs, 2]
         hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 3]
+        coordinates = coordinates.reshape((4*n_anchors, w, h))
+        return np.concatenate((labels, coordinates))
+
+class SSDDataset(MultiAnchorDataset):
+    """ Concrete multianchor dataset that uses SSD like box assignement. We assign
+    each true box to multiple anchors (anchor with highest IOU for this box and
+    any other anchor with IOU higher than the threshold (0.5 to 0.7)).
+    Anchors that have IOU with all true boxes below another threshold (around 0.3) are
+    set to background. All other anchors are set to ignore and ignored during training.
+    """
+    def __init__(self, imgname, lblname, positiove_anchor_threshold = 0.7,
+                 backgraound_anchor_threshold = 0.5, denominator = 'union', **kwargs):
+        self._positive_thresh = positive_anchor_threshold
+        self._bkg_thresh = background_anchor_threshold
+        self._denominator = denominator
+        super().__init__(imgname, lblname, **kwargs)
+
+    def _get_labels(self, idx):
+        w, h = self._w//self._grid_size, self._h//self._grid_size
+        n_anchors = self._anchors.shape[0]
+        anchors = self._anchors.reshape(-1,4)
+        labels = np.full(anchors.shape[0], -1.0)
+        coordinates = np.zeros(4*anchors.shape[0])
+        xs, ys, ws, hs = np.split(coordinates, 4)
+        # Filter out boxes that overlap less than threshold with the window
+        boxes = self._get_boxes(idx)
+        iou_matrix = iou(anchors, boxes, denominator=self._denominator)
+        # Set background anchor labels to 0.0
+        bkg_mask = (iou_matrix < self._bkg_thresh).all(axis=-1)
+        labels[bkg_mask] = 0.0
+        # Set labels for anchors that have maximum IOU with true boxes to 1.0
+        match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
+        labels[match_idxs] = 1.0
+        # Set label for anchors that have IOU > than pos_thresh to 1.0
+        positive_mask = (iou_matrix > self._positive_thresh).any(axis=-1)
+        labels[positive_mask] = 1.0
+        # Remaining boxes are ignore boxes - they are not maximal and have intermediate
+        # IOU with some true boxes (between bkg_thresh and positive_thresh)
+        # Create mask with all matched anchors to set coordinates
+        match_mask = labels == 1.0
+        # Set box coordinates for positive anchors
+        xs[match_mask] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_mask, 0])/anchors[match_mask, 2]
+        ys[match_mask] = (boxes[:,1] + boxes[:,3]/2 - anchors[match_mask, 1])/anchors[match_mask, 3]
+        ws[match_mask] = boxes[:,2]/anchors[match_mask, 2]
+        hs[match_mask] = boxes[:,3]/anchors[match_mask, 3]
+        labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
         return np.concatenate((labels, coordinates))
 
