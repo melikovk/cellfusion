@@ -169,8 +169,8 @@ class SSDDataset(MultiAnchorDataset):
     Anchors that have IOU with all true boxes below another threshold (around 0.3) are
     set to background. All other anchors are set to ignore and ignored during training.
     """
-    def __init__(self, imgname, lblname, positiove_anchor_threshold = 0.7,
-                 backgraound_anchor_threshold = 0.5, denominator = 'union', **kwargs):
+    def __init__(self, imgname, lblname, positive_anchor_threshold = 0.7,
+                 background_anchor_threshold = 0.5, denominator = 'union', **kwargs):
         self._positive_thresh = positive_anchor_threshold
         self._bkg_thresh = background_anchor_threshold
         self._denominator = denominator
@@ -180,7 +180,7 @@ class SSDDataset(MultiAnchorDataset):
         w, h = self._w//self._grid_size, self._h//self._grid_size
         n_anchors = self._anchors.shape[0]
         anchors = self._anchors.reshape(-1,4)
-        labels = np.full(anchors.shape[0], -1.0)
+        labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
         # Filter out boxes that overlap less than threshold with the window
@@ -188,22 +188,30 @@ class SSDDataset(MultiAnchorDataset):
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         # Set background anchor labels to 0.0
         bkg_mask = (iou_matrix < self._bkg_thresh).all(axis=-1)
-        labels[bkg_mask] = 0.0
-        # Set labels for anchors that have maximum IOU with true boxes to 1.0
+        labels[bkg_mask] = 0
+        # Set labels for anchors that have maximum IOU with true boxes
+        # to the index of the matching true box + 1
         match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
-        labels[match_idxs] = 1.0
-        # Set label for anchors that have IOU > than pos_thresh to 1.0
-        positive_mask = (iou_matrix > self._positive_thresh).any(axis=-1)
-        labels[positive_mask] = 1.0
+        labels[match_idxs] = np.arange(1, match_idxs.shape[0]+1)
+        # Select unmatched anchors
+        unmatched_mask = labels == -1
+        unmatched_labels = labels[unmatched_mask]
+        # Find true boxes with maximal IOU with unmatched anchors
+        match_ious, match_idx = iou_matrix[unmatched_mask].max(axis=-1), iou_matrix[unmatched_mask].argmax(axis=-1)
+        # Assign anchors that have IOU with any true box higher than positive_threshold
+        # to the index of the true box with highest IOU
+        unmatched_labels[match_ious > self._positive_thresh] = match_idx[match_ious > self._positive_thresh] + 1
+        labels[unmatched_mask] = unmatched_labels
         # Remaining boxes are ignore boxes - they are not maximal and have intermediate
         # IOU with some true boxes (between bkg_thresh and positive_thresh)
         # Create mask with all matched anchors to set coordinates
-        match_mask = labels == 1.0
+        match_mask = labels > 0
         # Set box coordinates for positive anchors
-        xs[match_mask] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_mask, 0])/anchors[match_mask, 2]
-        ys[match_mask] = (boxes[:,1] + boxes[:,3]/2 - anchors[match_mask, 1])/anchors[match_mask, 3]
-        ws[match_mask] = boxes[:,2]/anchors[match_mask, 2]
-        hs[match_mask] = boxes[:,3]/anchors[match_mask, 3]
+        xs[match_mask] = (boxes[labels[match_mask]-1,0] + boxes[labels[match_mask]-1,2]/2 - anchors[match_mask, 0])/anchors[match_mask, 2]
+        ys[match_mask] = (boxes[labels[match_mask]-1,1] + boxes[labels[match_mask]-1,3]/2 - anchors[match_mask, 1])/anchors[match_mask, 3]
+        ws[match_mask] = boxes[labels[match_mask]-1,2]/anchors[match_mask, 2]
+        hs[match_mask] = boxes[labels[match_mask]-1,3]/anchors[match_mask, 3]
+        labels[labels>0] = 1
         labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
         return np.concatenate((labels, coordinates))
