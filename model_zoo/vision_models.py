@@ -7,6 +7,7 @@ from image.metrics.localization import iou
 import json
 from inspect import signature
 from image.datasets.yolo import labels_to_boxes
+from functools import partial
 import math
 
 NUCLEUS = 0
@@ -20,14 +21,11 @@ class ObjectDetectionModel(nn.Module):
     Takes class object of feature and head models and dicts with
     corresponding configuration parameters
     """
-    def __init__(self, features_model, head_model, features_config, head_config, cell_anchors, size_transform='log'):
+    def __init__(self, features_model, head_model, cell_anchors):
         super().__init__()
-        self.features = features_model(**features_config)
-        self.head = head_model(**head_config)
-        self.features_config = features_config
-        self.head_config = head_config
+        self.features = features_model
+        self.head = head_model
         self.cell_anchors = cell_anchors
-        self.size_transform = size_transform
 
     def forward(self, x):
         return self.head(self.features(x))
@@ -38,10 +36,6 @@ class ObjectDetectionModel(nn.Module):
         """
         n = self.cell_anchors.shape[0]
         logit_threshold = math.log(threshold/(1-threshold))
-        if self.size_transform == 'log':
-            x[:,-2*n:,...] = x[:,-2*n:,...].exp()
-        elif self.size_transform == 'sqrt':
-            x[:,-2*n:,...] = x[:,-2*n:,...].pow(2)
         return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors, threshold = logit_threshold)
 
     @torch.no_grad()
@@ -54,7 +48,6 @@ class ObjectDetectionModel(nn.Module):
         """ Get targets from labels Tensor
         """
         return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors)
-
 
 
 def saveboxes(fpath, boxes, scores):

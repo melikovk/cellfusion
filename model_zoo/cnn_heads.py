@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from collections import OrderedDict
+from functools import partial
 
 class AdaptiveMaxAvgPool2D(nn.Module):
     """ 2D pooling layer that concatenates results of AdaptiveMaxPool2d and AdaptiveAvgPool2d
@@ -66,17 +67,16 @@ class ObjectDetectionHead(nn.Module):
     """
     def __init__(self, in_features, anchors = 1, activation='relu', hidden_features=[1024, 1024],
                  hidden_kernel=[3, 3], bn_args={'momentum':0.01}, act_args={},
-                 probability=False, coordinate_transform = 'hardtanh', eps = 1e-5):
+                 coordinate_transform = 'hardtanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
             "You should provide kernel_size for each hidden convolutional layer"
         assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
             "coordinate_transform should be 'hardtanh' or 'sigmoid'"
         super().__init__()
         self.anchors = anchors
-        self.eps = eps
-        self.conf_func = F.sigmoid if probability else lambda x: x
+        self.eps = torch.tensor(eps)
         if coordinate_transform == 'hardtanh':
-            self.coord_func = lambda x: F.hardtanh(x, min_val=0., max_val=1.)
+            self.coord_func = partial(F.hardtanh, min_val=0., max_val=1.)
         else:
             self.coord_func = F.sigmoid
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
@@ -92,7 +92,7 @@ class ObjectDetectionHead(nn.Module):
         n = self.anchors
         for m in list(self.children()):
             x = m(x)
-        x = torch.cat([self.conf_func(x[:,:n,:,:]),self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], torch.tensor(self.eps).to(x.device))], dim = 1)
+        x = torch.cat([x[:,:n,:,:],self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], self.eps.to(x.device))], dim = 1)
         return x
 
 class ObjectDetectionHeadSplit(nn.Module):
@@ -123,7 +123,7 @@ class ObjectDetectionHeadSplit(nn.Module):
         self.eps = torch.tensor(eps)
         self.anchors = anchors
         if coordinate_transform == 'hardtanh':
-            self.coord_func = lambda x: F.hardtanh(x, min_val=0., max_val=1.)
+            self.coord_func = partial(F.hardtanh, min_val=0., max_val=1.)
         else:
             self.coord_func = F.sigmoid
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)

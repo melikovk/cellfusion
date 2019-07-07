@@ -10,3 +10,4 @@ runs/
 .ipynb_checkouts/
 *.svm
 *.graph
+*.pickle

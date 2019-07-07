@@ -403,7 +403,7 @@ def precision_recall_meanIOU(predict, target, iou_thresholds, nms_threshold = 0.
     else:
         predict, target = [predict], [target]
     counts = np.zeros((len(iou_thresholds), 3), dtype=np.int)
-    ious = []
+    ious = [[]]
     for i in range(len(predict)):
         pboxes, pscores = predict[i]
         tboxes, tscores = target[i]
@@ -418,5 +418,6 @@ def precision_recall_meanIOU(predict, target, iou_thresholds, nms_threshold = 0.
         tp, fp, fn = counts[i]
         results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
         results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
-    results["meanIOU"] = np.concatenate(ious).mean() if len(ious) > 0 else 0
+    ious = np.concatenate(ious)
+    results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
     return results

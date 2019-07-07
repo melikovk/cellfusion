@@ -10,17 +10,17 @@ import image.cv2transforms as cv2transforms
 from model_zoo import mobilenet_v2, cnn_heads
 from losses import yolo1_loss, yolo2_loss, object_detection_loss
 from model_zoo.vision_models import ObjectDetectionModel, saveboxes
-from image.datasets.yolo import YoloGridDataset, YoloRandomDataset, RandomLoader, labels_to_boxes, get_cell_anchors
-from image.metrics.localization import precision_recall_f1_batch, precision_recall_meanIOU_batch
+from image.datasets.yolo import YoloDataset, RandomLoader, labels_to_boxes, get_cell_anchors
+from image.metrics.localization import precision_recall_f1, precision_recall_meanIOU
 from model_zoo import catalog
 import argparse
 from functools import partial
 
-_MODEL_SELECTION = {'base': catalog.mobilenet_v2_1ch_object_detect_base,
-                    'full': catalog.mobilenet_v2_1ch_object_detect_full,
-                    'shrink': catalog.mobilenet_v2_1ch_object_detect_shrink,
-                    'deep': catalog.mobilenet_v2_1ch_object_detect_deep,
-                    'split_base': catalog.mobilenet_v2_1ch_object_detect_split_base}
+_MODEL_SELECTION = {'base': catalog.mobilenet_v2_base_1ch_yolo,
+                    'full': catalog.mobilenet_v2_full_1ch_yolo,
+                    'shrink': catalog.mobilenet_v2_shrink_1ch_yolo,
+                    'deep': catalog.mobilenet_v2_deep_1ch_yolo,
+                    'split_base': catalog.mobilenet_v2_base_1ch_split_yolo}
 
 
 def imgToTensor(img):
@@ -42,25 +42,27 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
     with open(datadir+'test.txt') as f:
         test_names = [(datadir+chanel+name[:-1]+'.tif', datadir+'boxes/'+name[:-1]+'boxes.json')
                         for name in f.readlines()]
+    model = _MODEL_SELECTION[modelchoice]()
     yolo_transforms = transforms.Compose([cv2transforms.AutoContrast(),
                                         cv2transforms.Typecast(np.float32),
                                         imgToTensor])
-    trainDataset = ConcatDataset([YoloRandomDataset(*names,
+    trainDataset = ConcatDataset([YoloDataset(*names,
                                         win_size = (224, 224),
                                         border_size = 32,
                                         length = 500,
+                                        cell_anchors = model.cell_anchors,
                                         transforms = yolo_transforms) for names in train_names])
-    validDataset = ConcatDataset([YoloGridDataset(*names,
+    validDataset = ConcatDataset([YoloDataset(*names,
                                         win_size=(224, 224),
                                         border_size = 32,
+                                        length = 100,
+                                        cell_anchors = model.cell_anchors,
                                         transforms = yolo_transforms) for names in test_names])
-    model = _MODEL_SELECTION[modelchoice]()
-    labels_to_boxes_func = partial(labels_to_boxes, cell_anchors = get_cell_anchors([1],[]))
     session = TrainSession(model,
                            partial(object_detection_loss, confidence_loss = confidence_loss, size_transform=size_transform, localization_weight=localization_weight),
                            optim.Adam,
                            model.parameters(),
-                           partial(precision_recall_meanIOU_batch, labeltoboxesfunc = labels_to_boxes_func, iou_thresholds=[0.5, 0.7, 0.9]),
+                           partial(precision_recall_meanIOU, iou_thresholds=[0.5, 0.7, 0.9]),
                            log_dir = logdir,
                            opt_defaults = {'lr':init_lr,'weight_decay':1e-5},
                            scheduler = optim.lr_scheduler.CosineAnnealingLR,
@@ -69,7 +71,6 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
                            device = torch.device(device))
     image_datasets = {'train': trainDataset, 'val': validDataset}
     dataloaders = {x: RandomLoader(image_datasets[x], batch_size=batch, shuffle=True, num_workers=2) for x in ['train', 'val']}
-    # session.train(dataloaders['train'], dataloaders['val'], 3)
     for i in range(n_cycles):
         session.train(dataloaders['train'], dataloaders['val'], t_max)
         session.update_lr(lr_mult)
@@ -87,8 +88,8 @@ if __name__ == "__main__":
     main_parser.add_argument('--t_max', type = int, default = 20, help = 'Cycle length for scheduler')
     main_parser.add_argument('--lr_mult', type = float, default = 0.5, help = 'Factor to adjust learning rate for consecutive cycles')
     main_parser.add_argument('--n_cycles', type = int, default = 10, help = 'Number of cycles of training')
-    main_parser.add_argument('--size_transform', choices = ['log','sqrt','none'], default= 'log', help = 'Transformation of the box size for loss calculation')
-    main_parser.add_argument('--confidence_loss', choices = ['mse','corssentropy'], default= 'crossentropy', help = 'Transformation of the box size for loss calculation')
+    main_parser.add_argument('--size_transform', choices = ['log','sqrt','none'], default= 'none', help = 'Transformation of the box size for loss calculation')
+    main_parser.add_argument('--confidence_loss', choices = ['mse','corssentropy'], default= 'crossentropy', help = 'Choice of confidence loss')
     main_parser.add_argument('--localization_weight', type = float, default = 1.0, help = 'Multiplier for the localization loss')
     main_args = main_parser.parse_args()
     train_nucleus_mobilenet(modelchoice = main_args.model,

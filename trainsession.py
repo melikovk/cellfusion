@@ -13,6 +13,9 @@ from skimage.transform import rescale
 
 autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
 
+def return_zero():
+    return 0.0
+
 def predict_nuclei(image, model, grid_size = 32, conf_threshold = 0.5, iou_threshold = 0.8, offset= (0,0), transform = autocontrast):
     if isinstance(image, str):
         img = io.imread(image).T
@@ -85,14 +88,14 @@ class SessionSaver:
                 fname = self.path+'.tar'
             else:
                 fname = f'{self.path}_{epoch}.tar'
-            session.save(fname)
+            torch.save(session.state_dict(), fname)
         elif self.bestmetric is None or metrics[self.metric]*self.mult < self.bestmetric*self.mult:
             self.bestmetric = metrics[self.metric]
             if self.overwrite:
                 fname = self.path+'.tar'
             else:
                 fname = f'{self.path}_{epoch}.tar'
-            session.save(fname)
+            torch.save(session.state_dict(), fname)
 
     def state_dict(self):
         state = {'bestmetric':self.bestmetric}
@@ -123,7 +126,8 @@ class TrainSession:
         device: device on which to perform training
     """
     def __init__(self, model, lossfunc, optimizer, parameters, acc_func, opt_defaults = None,
-                 scheduler=None, scheduler_params=None, log_dir=None, saver=None, device = None):
+                 scheduler=None, scheduler_params=None, log_dir=None, saver=None,
+                 device = None):
         if device is None:
             self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         else:
@@ -149,9 +153,9 @@ class TrainSession:
     @torch.no_grad()
     def evaluate(self, data):
         self.model.eval()
-        loss = defaultdict(lambda:0.0)
+        loss = defaultdict(return_zero)
         size = 0
-        accuracy = defaultdict(lambda:0.0)
+        accuracy = defaultdict(return_zero)
         for inputs, labels in data:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
@@ -179,10 +183,10 @@ class TrainSession:
             self.epoch += 1
             self.epochs_left = epochs-epoch-1
             self.model.train()
-            train_loss = defaultdict(lambda:0.0)
+            train_loss = defaultdict(return_zero)
             size = 0
             # train_acc = 0.0
-            train_acc = defaultdict(lambda:0.0)
+            train_acc = defaultdict(return_zero)
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
@@ -237,7 +241,7 @@ class TrainSession:
             for group in self.optimizer.param_groups:
                 group['lr'] = group['lr']*factor
 
-    def save(self, path):
+    def state_dict(self):
         state = {'epoch': self.epoch,
                  'epochs_left': self.epochs_left,
                  'model': self.model.state_dict(),
@@ -248,10 +252,12 @@ class TrainSession:
             state['log_dir'] = self.log_dir
         if self.saver:
             state['saver'] = self.saver.state_dict()
-        torch.save(state, path)
+        return state
+        # torch.save(state, path)
 
-    def load(self, path):
-        state = torch.load(path)
+
+    def load_state_dict(self, state):
+        # state = torch.load(path)
         self.epoch = state['epoch']
         self.epochs_left = state['epochs_left']
         self.model.load_state_dict(state['model'])
@@ -262,6 +268,3 @@ class TrainSession:
             self.log_dir = state['log_dir']
         if self.saver and 'saver' in state:
             self.saver.load_state_dict(state['saver'])
-
-    def save_model(self, path):
-        torch.save(self.model.state_dict(), path)
