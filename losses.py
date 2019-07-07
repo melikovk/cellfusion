@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from collections import OrderedDict
 
 def object_detection_loss(predict, target, reduction='mean', confidence_loss = 'crossentropy',
-    size_transform = 'log', localization_weight = 1):
+    size_transform = 'log', localization_weight = 1, normalize_per_anchor = True):
     """ Loss function for object detection for dense grid of predictions such
     as in YOLO and SSD detectors. Predictions are assumed to be groupped in the following way :
     objectness score's for all anchors, x's for all anchors, y's for all anchors
@@ -24,6 +24,8 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     Returns:
         {'loss': total_loss, 'confidence_loss':confidence_loss, 'localization_loss':localization_loss}
     """
+    assert predict.shape == target.shape, \
+        "prediction and target tensors should have the same shape"
     batch_size, _, w, h = predict.shape
     predict = predict.reshape(batch_size, 5, -1, w, h)
     target = target.reshape(batch_size, 5, -1, w, h)
@@ -37,9 +39,9 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     box_mask = target[:,0:1,...] > 0.5
     loss_box = F.mse_loss(torch.masked_select(predict[:,1:3,...], box_mask), torch.masked_select(target[:,1:3,...], box_mask), reduction='sum')
     if size_transform == 'log':
-        loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask), torch.masked_select(target[:,3:,...], box_mask).log(), reduction='sum')
+        loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask).log(), torch.masked_select(target[:,3:,...], box_mask).log(), reduction='sum')
     elif size_transform == 'sqrt':
-        loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask), torch.masked_select(target[:,3:,...], box_mask).sqrt(), reduction='sum')
+        loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask).sqrt(), torch.masked_select(target[:,3:,...], box_mask).sqrt(), reduction='sum')
     elif size_transform == 'none':
         loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask), torch.masked_select(target[:,3:,...], box_mask), reduction='sum')
     else:
@@ -48,14 +50,18 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
         loss_conf, loss_box = loss_conf/target.shape[0], loss_box/target.shape[0]
     elif reduction != 'sum':
         raise ValueError("reduction should be 'mean' or 'sum'")
+    if normalize_per_anchor:
+        loss_conf, loss_box = loss_conf/target.shape[2], loss_box/target.shape[2]
     loss = loss_conf + localization_weight*loss_box
     return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box}
 
 def object_detection_loss_fast(predict, target, reduction='mean', confidence_loss = 'crossentropy',
-    size_transform = 'log', localization_weight = 1, eps = 1e-5):
+    size_transform = 'log', localization_weight = 1, eps = 1e-5, normalize_per_anchor = True):
     """ This function is equivalent to object_detection_loss but uses multiplication by 0 for masking
     instead of torch.masked_select which is significantly slower.
     """
+    assert predict.shape == target.shape, \
+        "prediction and target tensors should have the same shape"
     eps = torch.tensor(eps).to(target.device)
     batch_size, _, w, h = predict.shape
     predict = predict.reshape(batch_size, 5, -1, w, h)
@@ -70,9 +76,9 @@ def object_detection_loss_fast(predict, target, reduction='mean', confidence_los
     box_mask = (target[:,0:1,...] > 0).to(torch.float)
     loss_box = F.mse_loss(predict[:,1:3,...]*box_mask, target[:,1:3,...]*box_mask, reduction='sum')
     if size_transform == 'log':
-        loss_box += F.mse_loss(predict[:,3:,...]*box_mask, target[:,3:,...].max(eps).log()*box_mask, reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,...].log()*box_mask, target[:,3:,...].max(eps).log()*box_mask, reduction='sum')
     elif size_transform == 'sqrt':
-        loss_box += F.mse_loss(predict[:,3:,...]*box_mask, target[:,3:,...].sqrt()*box_mask, reduction='sum')
+        loss_box += F.mse_loss(predict[:,3:,...].sqrt()*box_mask, target[:,3:,...].sqrt()*box_mask, reduction='sum')
     elif size_transform == 'none':
         loss_box += F.mse_loss(predict[:,3:,...]*box_mask, target[:,3:,...]*box_mask, reduction='sum')
     else:
@@ -81,13 +87,15 @@ def object_detection_loss_fast(predict, target, reduction='mean', confidence_los
         loss_conf, loss_box = loss_conf/target.shape[0], loss_box/target.shape[0]
     elif reduction != 'sum':
         raise ValueError("reduction should be 'mean' or 'sum'")
+    if normalize_per_anchor:
+        loss_conf, loss_box = loss_conf/target.shape[2], loss_box/target.shape[2]
     loss = loss_conf + localization_weight*loss_box
     return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box}
 
 def yolo1_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'mse',
-        confidence_output = 'logits', size_transform = 'none', localization_weight = localization_weight)
+        size_transform = 'none', localization_weight = localization_weight)
 
 def yolo2_loss(predict, target, reduction='mean', localization_weight = 1):
     return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'crossentropy',
-        confidence_output = 'logits', size_transform = 'log', localization_weight = localization_weight)
+        size_transform = 'log', localization_weight = localization_weight)
