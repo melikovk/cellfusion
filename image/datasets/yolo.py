@@ -180,11 +180,14 @@ class SSDDataset(MultiAnchorDataset):
         w, h = self._w//self._grid_size, self._h//self._grid_size
         n_anchors = self._anchors.shape[0]
         anchors = self._anchors.reshape(-1,4)
+        # Filter out boxes that overlap less than threshold with the window
+        boxes = self._get_boxes(idx)
+        # If there are no true boxes in the window, return label with all background
+        if boxes.shape[0] == 0:
+            return np.zeros((5*n_anchors, w, h))
         labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
-        # Filter out boxes that overlap less than threshold with the window
-        boxes = self._get_boxes(idx)
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         # Set background anchor labels to 0.0
         bkg_mask = (iou_matrix < self._bkg_thresh).all(axis=-1)

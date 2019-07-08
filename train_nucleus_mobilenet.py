@@ -10,7 +10,7 @@ import image.cv2transforms as cv2transforms
 from model_zoo import mobilenet_v2, cnn_heads
 from losses import yolo1_loss, yolo2_loss, object_detection_loss
 from model_zoo.vision_models import ObjectDetectionModel, saveboxes
-from image.datasets.yolo import YoloDataset, RandomLoader, labels_to_boxes, get_cell_anchors
+from image.datasets.yolo import YoloDataset, RandomLoader, labels_to_boxes, get_cell_anchors, SSDDataset
 from image.metrics.localization import precision_recall_f1, precision_recall_meanIOU
 from model_zoo import catalog
 import argparse
@@ -46,13 +46,13 @@ def train_nucleus_mobilenet(modelchoice, datadir, modeldir, logdir, device = 'cu
     yolo_transforms = transforms.Compose([cv2transforms.AutoContrast(),
                                         cv2transforms.Typecast(np.float32),
                                         imgToTensor])
-    trainDataset = ConcatDataset([YoloDataset(*names,
+    trainDataset = ConcatDataset([SSDDataset(*names,
                                         win_size = (224, 224),
                                         border_size = 32,
                                         length = 500,
                                         cell_anchors = model.cell_anchors,
                                         transforms = yolo_transforms) for names in train_names])
-    validDataset = ConcatDataset([YoloDataset(*names,
+    validDataset = ConcatDataset([SSDDataset(*names,
                                         win_size=(224, 224),
                                         border_size = 32,
                                         length = 100,
