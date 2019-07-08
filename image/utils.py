@@ -1,4 +1,5 @@
 import json
+import os.path
 import glob
 import numpy as np
 import cv2
@@ -12,6 +13,7 @@ from typing import List, Tuple, NewType
 import torch
 from torch.utils.data import Dataset
 from .metrics.localization import iou
+import xml.etree.ElementTree as ET
 
 NUCLEUS = 0
 BKG = 1
@@ -197,3 +199,14 @@ def centerinside(box:Rect, boxes, lt_anchor = 'topleft'):
     else:
         raise ValueError("lt_anchor should be {'topleft'|'center'}")
     return np.all(np.stack((xs>=x, xs<x+w, ys>=y, ys<y+h)), axis=0)
+
+def read_cell_counter_xml(fname):
+    counter_tree = ET.parse(fname)
+    markers = []
+    for marker_type in counter_tree.iter('Marker_Type'):
+        mtype = int(marker_type.find('Type').text)
+        for marker in marker_type.iter('Marker'):
+            x = int(marker.find('MarkerX').text)
+            y = int(marker.find('MarkerY').text)
+            markers.append([x,y,mtype])
+    return markers
