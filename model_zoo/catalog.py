@@ -7,64 +7,59 @@ import numpy as np
 ANCHORS1 = get_cell_anchors(scales = 2**(np.arange(0,4)/3), anchors = [(.5,.5,1.0),(0.0 ,0.5, 2.), (0.5, 0.0 ,.5)])
 ANCHORS0 = get_cell_anchors(scales=[1], anchors=[])
 
-def mobilenet_v2_base_1ch_yolo():
-    """ Creates an object detection model for 1 chanel images with feature extractor
+class MobilenetBase1ch(ObjectDetectionModel):
+    """ Object detection model for 1 chanel images with feature extractor
         that is similar to 1x MobileNet_v2 in original paper.
         Uses simple 2 layer fully convolutional object detection head
     """
-    cell_anchors = ANCHORS1.copy()
-    features_params = {'in_channels': 1}
-    head_params = {'in_features': 320, 'anchors': len(cell_anchors)}
-    model = ObjectDetectionModel(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
-    model.name = 'mobilenet_v2_base_1ch_yolo'
-    return model
+    def __init__(self):
+        cell_anchors = ANCHORS1.copy()
+        features_params = {'in_channels': 1}
+        head_params = {'in_features': 320, 'anchors': len(cell_anchors)}
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
 
-def mobilenet_v2_base_1ch_split_yolo():
+class MobilenetBase1chSplitHead(ObjectDetectionModel):
     """ Creates an object detection model for 1 chanel images with feature extractor
         that is similar to 1x MobileNet_v2 in original paper.
-        Uses simple 2 layer fully convolutional object detection head
+        Uses split fully convolutional object detection head
     """
-    cell_anchors = ANCHORS1.copy()
-    features_params = {'in_channels': 1}
-    head_params = {'in_features':320, 'anchors': len(cell_anchors)}
-    model = ObjectDetectionModel(MobileNetV2(**features_params), ObjectDetectionHeadSplit(**head_params), cell_anchors)
-    model.name = "mobilenet_v2_base_1ch_split_yolo"
-    return model
+    def __init__(self):
+        cell_anchors = ANCHORS1.copy()
+        features_params = {'in_channels': 1}
+        head_params = {'in_features':320, 'anchors': len(cell_anchors)}
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplit(**head_params), cell_anchors)
 
-def mobilenet_v2_full_1ch_yolo():
+class MobilenetFull1ch(ObjectDetectionModel):
     """ Creates an object detection model for 1 chanel images with feature extractor
         that has 1.5 times more features in each bottleneck layer relative to
         1x MobileNet_v2 in original paper.
         Uses simple 2 layer fully convolutional object detection head
     """
-    cell_anchors = ANCHORS1.copy()
-    features_params = {'in_channels': 1, 'out_channels': (48,24,36,48,96,144,240,480)}
-    head_params = {'in_features':480, 'anchors': len(cell_anchors)}
-    model = ObjectDetectionModel(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
-    model.name = 'mobilenet_v2_full_1ch_yolo'
-    return model
+    def __init__(self):
+        cell_anchors = ANCHORS1.copy()
+        features_params = {'in_channels': 1, 'out_channels': (48,24,36,48,96,144,240,480)}
+        head_params = {'in_features':480, 'anchors': len(cell_anchors)}
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
 
-def mobilenet_v2_shrink_1ch_yolo():
+class MobilenetShrink1ch(ObjectDetectionModel):
     """ Creates an object detection model for 1 chanel images with feature extractor
         that has expansion factor set to 3 vs 6 in 1x MobileNet_v2 from original paper.
         Uses simple 2 layer fully convolutional object detection head
     """
-    cell_anchors = ANCHORS1.copy()
-    features_params = {'in_channels': 1, 'expansions': (1,3,3,3,3,3,3)}
-    head_params = {'in_features':320, 'anchors': len(cell_anchors)}
-    model = ObjectDetectionModel(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
-    model.name = 'mobilenet_v2_shrink_1ch_yolo'
-    return model
+    def __init__(self):
+        cell_anchors = ANCHORS1.copy()
+        features_params = {'in_channels': 1, 'expansions': (1,3,3,3,3,3,3)}
+        head_params = {'in_features':320, 'anchors': len(cell_anchors)}
+        supre().__init__(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
 
-def mobilenet_v2_deep_1ch_yolo():
+class MobilenetDeep1ch(ObjectDetectionModel):
     """ Creates an object detection model for 1 chanel images with feature extractor
         that has 2 times more repeats in each block (i.e. ~ 2x deeper)
         than 1x MobileNet_v2 from original paper.
         Uses simple 2 layer fully convolutional object detection head
     """
-    cell_anchors = ANCHORS1.copy()
-    features_params = {'in_channels': 1, 'repeats': (2,4,6,8,6,6,2)}
-    head_params = {'in_features':320, 'anchors': len(cell_anchors)}
-    model = ObjectDetectionModel(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
-    model.name = 'mobilenet_v2_deep_1ch_yolo'
-    return model
+    def __init__(self):
+        cell_anchors = ANCHORS1.copy()
+        features_params = {'in_channels': 1, 'repeats': (2,4,6,8,6,6,2)}
+        head_params = {'in_features':320, 'anchors': len(cell_anchors)}
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
