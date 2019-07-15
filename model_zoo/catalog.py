@@ -63,3 +63,14 @@ class MobilenetDeep1ch(ObjectDetectionModel):
         features_params = {'in_channels': 1, 'repeats': (2,4,6,8,6,6,2)}
         head_params = {'in_features':320, 'anchors': len(cell_anchors)}
         super().__init__(MobileNetV2(**features_params), ObjectDetectionHead(**head_params), cell_anchors)
+
+class MobilenetBase1chSplitHeadSingleAnchor(ObjectDetectionModel):
+    """ Creates an object detection model for 1 chanel images with feature extractor
+        that is similar to 1x MobileNet_v2 in original paper.
+        Uses split fully convolutional object detection head
+    """
+    def __init__(self):
+        cell_anchors = ANCHORS0.copy()
+        features_params = {'in_channels': 1}
+        head_params = {'in_features':320, 'anchors': len(cell_anchors)}
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplit(**head_params), cell_anchors)
