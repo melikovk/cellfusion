@@ -26,6 +26,7 @@ class ObjectDetectionModel(nn.Module):
         self.features = features_model
         self.head = head_model
         self.cell_anchors = cell_anchors
+        self.grid_size = self.features.grid_size
 
     def forward(self, x):
         return self.head(self.features(x))
@@ -36,7 +37,7 @@ class ObjectDetectionModel(nn.Module):
         """
         n = self.cell_anchors.shape[0]
         logit_threshold = math.log(threshold/(1-threshold))
-        return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors, threshold = logit_threshold)
+        return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = logit_threshold)
 
     @torch.no_grad()
     def predict(self, x):
@@ -47,7 +48,7 @@ class ObjectDetectionModel(nn.Module):
     def get_targets(self, x):
         """ Get targets from labels Tensor
         """
-        return labels_to_boxes(x, grid_size = self.features.grid_size, cell_anchors = self.cell_anchors)
+        return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
 
 
 def saveboxes(fpath, boxes, scores):
