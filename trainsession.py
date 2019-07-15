@@ -10,8 +10,20 @@ from image.datasets.yolo import labels_to_boxes, get_cell_anchors
 from image.metrics.localization import nms
 from image.cv2transforms import AutoContrast, Gamma
 from skimage.transform import rescale
+from importlib import import_module
+from PIL import Image
 
 autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
+
+def get_filenames(datadir, channel):
+    channel += '/'
+    with open(datadir+'train.txt') as f:
+        train_names = [(datadir+channel+name[:-1]+'.tif', datadir+'boxes/'+name[:-1]+'boxes.json')
+                        for name in f.readlines()]
+    with open(datadir+'test.txt') as f:
+        test_names = [(datadir+channel+name[:-1]+'.tif', datadir+'boxes/'+name[:-1]+'boxes.json')
+                        for name in f.readlines()]
+    return train_names, test_names
 
 def return_zero():
     return 0.0
@@ -68,7 +80,7 @@ class SessionSaver:
     """ A class for saving pytorch training sesssion
     It requires a full path (path + filename) where to save the training sesssion file.
     """
-    def __init__(self, path, frequency = 1, overwrite = True, bestonly = True, metric = 'loss'):
+    def __init__(self, path, frequency = 1, overwrite = True, bestonly = True, metric = 'loss', ascending = False):
         if path.endswith('.tar'):
             self.path = path[:-4]
         else:
@@ -77,7 +89,7 @@ class SessionSaver:
         self.overwrite = overwrite
         self.bestonly = bestonly
         self.metric = metric
-        self.mult = -1 if metric == 'accuracy' else 1
+        self.direction = -1 if ascending else 1
         self.bestmetric = None
 
     def save(self, session, epoch, metrics):
@@ -89,7 +101,7 @@ class SessionSaver:
             else:
                 fname = f'{self.path}_{epoch}.tar'
             torch.save(session.state_dict(), fname)
-        elif self.bestmetric is None or metrics[self.metric]*self.mult < self.bestmetric*self.mult:
+        elif self.bestmetric is None or metrics[self.metric]*self.direction < self.bestmetric*self.direction:
             self.bestmetric = metrics[self.metric]
             if self.overwrite:
                 fname = self.path+'.tar'
@@ -98,11 +110,23 @@ class SessionSaver:
             torch.save(session.state_dict(), fname)
 
     def state_dict(self):
-        state = {'bestmetric':self.bestmetric}
+        state = {'bestmetric':self.bestmetric,
+            'path': self.path,
+            'frequency':self.frequency,
+            'overwrite':self.overwrite,
+            'bestonly':self.bestonly,
+            'metric': self.metric,
+            'direction': self.direction}
         return state
 
     def load_state_dict(self, state):
         self.bestmetric = state['bestmetric']
+        self.path = state['path']
+        self.frequency = state['frequency']
+        self.overwrite = state['overwrite']
+        self.bestonly = state['bestonly']
+        self.metric = state['metric']
+        self.direction = state['direction']
 
 
 class TrainSession:
@@ -136,6 +160,7 @@ class TrainSession:
         self.lossfunc = lossfunc
         self.optimizer = optimizer(parameters) if opt_defaults is None else optimizer(parameters, **opt_defaults)
         self.scheduler =  None if scheduler is None else scheduler(self.optimizer, **scheduler_params)
+        self.schedular_params = scheduler_params
         self.acc_func = acc_func
         self.log_dir = log_dir
         self.saver = saver
@@ -223,8 +248,6 @@ class TrainSession:
                     metrics[k+'/train'] = v
                 for k, v in valid_acc.items():
                     metrics[k+'/validation'] = v
-                # metrics['accuracy/train'] = train_acc
-                # metrics['accuracy/validation'] = valid_acc
                 for metric, value in metrics.items():
                     writer.add_scalar(metric, value, self.epoch)
             if self.saver:
@@ -245,26 +268,79 @@ class TrainSession:
         state = {'epoch': self.epoch,
                  'epochs_left': self.epochs_left,
                  'model': self.model.state_dict(),
-                 'optimizer': self.optimizer.state_dict()}
+                 'model_type': {'name':type(self.model).__name__, 'module':type(self.model).__module__},
+                 'optimizer': _map_param_ids_to_names(self.optimizer.state_dict(), self.model),
+                 'optimizer_type': {'name':type(self.optimizer).__name__, 'module':type(self.optimizer).__module__},
+                 'lossfunc':self.lossfunc.state_dict(),
+                 'lossfunc_type':{'name':type(self.lossfunc).__name__, 'module':type(self.lossfunc).__module__},
+                 'acc_func':self.acc_func.state_dict(),
+                 'acc_func_type':{'name':type(self.acc_func).__name__, 'module':type(self.acc_func).__module__}}
         if self.scheduler:
             state['scheduler'] = self.scheduler.state_dict()
+            state['scheduler_type'] = {'name':type(self.scheduler).__name__, 'module':type(self.scheduler).__module__}
+            state['scheduler_params'] = self.scheduler_params
         if self.log_dir:
             state['log_dir'] = self.log_dir
         if self.saver:
             state['saver'] = self.saver.state_dict()
         return state
-        # torch.save(state, path)
-
 
     def load_state_dict(self, state):
-        # state = torch.load(path)
         self.epoch = state['epoch']
         self.epochs_left = state['epochs_left']
         self.model.load_state_dict(state['model'])
         self.optimizer.load_state_dict(state['optimizer'])
+        self.lossfunc.load_state_dict(state['lossfunc'])
+        self.acc_func.load_state_dict(state['acc_func'])
         if self.scheduler and 'scheduler' in state:
             self.scheduler.load_state_dict(state['scheduler'])
         if not self.log_dir and 'log_dir' in state:
             self.log_dir = state['log_dir']
         if self.saver and 'saver' in state:
             self.saver.load_state_dict(state['saver'])
+
+    @classmethod
+    def restore_from_state_dict(cls, state, device = None):
+        model = getattr(import_module(state['model_type']['module']), state['model_type']['name'])()
+        lossfunc = getattr(import_module(state['lossfunc_type']['module']), state['lossfunc_type']['name'])()
+        acc_func = getattr(import_module(state['acc_func_type']['module']), state['acc_func_type']['name'])()
+        named_params = dict(model.named_parameters())
+        param_groups = [{'params':[named_params[p] for p in g['params']]} for g in state['optimizer']['param_groups']]
+        optimizer = getattr(import_module(state['optimizer_type']['module']), state['optimizer_type']['name'])
+        scheduler = getattr(import_module(state['scheduler_type']['module']), state['scheduler_type']['name']) if 'scheduler' in state else None
+        scheduler_params = state['scheduler_params'] if 'scheduler' in state else None
+        log_dir = state['log_dir'] if 'log_dir' in state else None
+        saver = SessionSaver(" ") if 'saver' in state else None
+        session = cls(model = model, lossfunc = lossfunc, optimizer = optimizer, parameters = param_groups,
+            acc_func = acc_func, opt_defaults = None, scheduler = scheduler, scheduler_params = scheduler_params,
+            log_dir = log_dir, saver = saver, device = device)
+        session.load_state_dict(state)
+        return session
+
+def _map_param_ids_to_names(opt_state, model):
+    reverse_dict = {id(parameter):name for name, parameter in model.named_parameters()}
+    new_state = opt_state.copy()
+    for g in new_state['param_groups']:
+        g['params'] = [reverse_dict[i] for i in g['params']]
+    return new_state
+
+def predict_boxes(model, imgname, transforms=None, nms_threshold=None):
+    img  = Image.open(imgname)
+    w, h = img.size
+    w1 = (w//model.grid_size)*model.grid_size
+    h1 = (h//model.grid_size)*model.grid_size
+    wfactor = w / w1
+    hfactor = h / h1
+    img = img.resize((w1, h1))
+    device = next(model.parameters()).device
+    if transforms is None:
+        input = torch.from_numpy(np.asarray(img).T.astype(np.float32)).reshape(1, 1, w1, h1).to(device)
+    else:
+        input = torch.from_numpy(transforms(np.asarray(img).T).astype(np.float32)).reshape(1, 1, w1, h1).to(device)
+    boxes, scores = model.predict(input)[0]
+    if nms_threshold is not None:
+        keep_idx = nms(boxes, scores, nms_threshold)
+        boxes = boxes[keep_idx]
+        scores = scores[keep_idx]
+    boxes = boxes * np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
+    return boxes, scores
