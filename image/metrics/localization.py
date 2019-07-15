@@ -316,7 +316,7 @@ def match_boxes_numpy(predict, target):
     boxes will have IOU of 0). The prediction boxes should be sorted
     in ascending order of their prediction confidence score.
     Parameters:
-        predict: (n,4) ndarray of box predictions
+        predict: (n, 4) ndarray of box predictions
         target: (n, 4) ndarray of box targets
     Returns:
         (ious, p_idxs, t_idxs): tuple of ndarrays
@@ -406,8 +406,8 @@ def precision_recall_meanIOU(predict, target, iou_thresholds, nms_threshold = 0.
     ious = [[]]
     for i in range(len(predict)):
         pboxes, pscores = predict[i]
-        tboxes, tscores = target[i]
-        tboxes = tboxes[nms(tboxes, tscores,.95)]
+        tboxes = target[i]
+        tboxes = tboxes[nms(tboxes, np.ones(tboxes.shape[0]),.95)]
         pboxes = pboxes[nms(pboxes, pscores, nms_threshold)]
         if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
             ious.append(match_boxes_numpy(pboxes, tboxes)[0])
@@ -437,8 +437,8 @@ class PrecisionRecallMeanIOU:
         ious = [[]]
         for i in range(len(predict)):
             pboxes, pscores = predict[i]
-            tboxes, tscores = target[i]
-            tboxes = tboxes[nms(tboxes, tscores,.95)]
+            tboxes = target[i]
+            tboxes = tboxes[nms(tboxes, np.ones(tboxes.shape[0]),.95)]
             pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 ious.append(match_boxes_numpy(pboxes, tboxes)[0])
