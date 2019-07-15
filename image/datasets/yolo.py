@@ -6,6 +6,7 @@ from ..utils import centerinside
 from ..metrics.localization import iou
 import torch
 import math
+from scipy.special import expit
 
 NUCLEUS = 0
 BKG = 1
@@ -23,19 +24,28 @@ class RandomLoader(DataLoader):
             self.dataset.reset()
         return super().__iter__()
 
+def get_boxes_from_json(fname):
+    with open(fname, 'r') as f:
+        boxes = json.load(f)
+    return np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])
+
+def save_boxes_to_json(boxes, scores, fname):
+    probs = expit(scores)
+    records = [{'type':0, 'p':probs[idx], 'bounds':boxes[idx].round().astype(int).tolist()} for idx in range(probs.shape[0])]
+    with open(fname, 'w') as f:
+        json.dump(records, f)
+
 class CropDataset(Dataset):
     """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
     def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, sample='random', length = None, seed=None, stride=None):
-        self._img = Image.open(imgname)
+        self._img = np.asarray(Image.open(imgname)).T
         self._w, self._h = win_size
         self._grid_size = grid_size
         self._border_size = border_size
         self._transforms = transforms
         # Create array ob object boxes
-        with open(lblname, 'r') as f:
-            boxes = json.load(f)
-        self._boxes = np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])/grid_size
+        self._boxes = get_boxes_from_json(lblname)/grid_size
         # self._boxes[:,:2] = self._boxes[:,:2] + self._boxes[:,2:]/2
         self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
 
@@ -43,21 +53,24 @@ class CropDataset(Dataset):
         if sample == 'random':
             self._seed = seed
             if length is None:
-                length = self._img.size[-1]*self._img.size[-2] // (self._w*self._h)
+                length = self._img.shape[-1]*self._img.shape[-2] // (self._w*self._h)
             if self._seed is not None:
                 np.random.seed(self._seed)
-            xs = np.random.randint(self._border_size, self._img.size[-2]-self._border_size-self._w, length)
-            ys = np.random.randint(self._border_size, self._img.size[-1]-self._border_size-self._h, length)
+            xs = np.random.randint(self._border_size, self._img.shape[-2]-self._border_size-self._w, length)
+            ys = np.random.randint(self._border_size, self._img.shape[-1]-self._border_size-self._h, length)
 
             return np.stack((xs,ys), axis=-1)
         elif sample == 'grid':
             self._seed = 0
             if stride is None:
                 stride = (self._w, self._h)
-            xrange = np.arange(self._border_size, self._img.size[-2] - self._border_size - self._w, stride[0])
-            yrange = np.arange(self._border_size, self._img.size[-1] - self._border_size - self._h, stride[1])
+            xrange = np.arange(self._border_size, self._img.shape[-2] - self._border_size - self._w, stride[0])
+            yrange = np.arange(self._border_size, self._img.shape[-1] - self._border_size - self._h, stride[1])
             return np.stack(np.meshgrid(xrange, yrange, indexing = 'ij')).reshape(2,-1).T
 
+    def _get_crop(self, idx):
+        x, y = self._xys[idx]
+        return self._img[x:x+self._w, y:y+self._h]
 
     def _get_labels(self, idx):
         raise NotImplementedError
@@ -66,11 +79,14 @@ class CropDataset(Dataset):
         return self._xys.shape[0]
 
     def __getitem__(self, idx):
-        x, y = self._xys[idx]
-        img = np.asarray(self._img.crop((x, y, x+self._w, y+self._h)))
+        img = self._get_crop(idx)
         if self._transforms is not None:
             img = self._transforms(img)
-        labels = self._get_labels(idx).astype(np.float32)
+        if len(img.shape) < 3:
+            img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
+        else:
+            img = torch.from_numpy(img.astype(np.float32))
+        labels = torch.from_numpy(self._get_labels(idx).astype(np.float32))
         return (img, labels)
 
     def reset(self):
@@ -268,7 +284,7 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
         if given batch return list of the predictions for each image
     """
     if len(labels.shape) == 4:
-        return [labels_to_boxes(img, grid_size,cell_anchors, threshold, offset) for img in labels]
+        return [labels_to_boxes(img, grid_size, cell_anchors, threshold, offset) for img in labels]
     if isinstance(offset, int):
         offx = offy = offset
     else:
