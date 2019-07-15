@@ -92,6 +92,7 @@ class SessionSaver:
         self.direction = -1 if ascending else 1
         self.bestmetric = None
 
+
     def save(self, session, epoch, metrics):
         if epoch % self.frequency != 0:
             return
@@ -160,7 +161,7 @@ class TrainSession:
         self.lossfunc = lossfunc
         self.optimizer = optimizer(parameters) if opt_defaults is None else optimizer(parameters, **opt_defaults)
         self.scheduler =  None if scheduler is None else scheduler(self.optimizer, **scheduler_params)
-        self.schedular_params = scheduler_params
+        self.scheduler_params = scheduler_params
         self.acc_func = acc_func
         self.log_dir = log_dir
         self.saver = saver

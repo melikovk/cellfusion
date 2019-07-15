@@ -113,16 +113,16 @@ def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldi
 
 if __name__ == "__main__":
     parameters= {
-    'datadir': expanduser('~/fast/Automate/20x/'),
+    'datadir': expanduser('~/workspace/fusion_data/Automate/20x/'),
     'channel': 'nuclei',
     'dataset_type': 'SSD',
     'train_batch': 32,
     'test_batch': 32,
-    'modeldir': 'models/mobilenet2_test',
-    'logdir': 'runs/mobilenet2_test_',
+    'modeldir': 'models/mobilenet2_base_multianchor_split',
+    'logdir': 'runs/mobilenet2_base_multianchor_split',
     'init_lr': 0.01,
     'cycle_length': 100,
     'device': 'cuda:0',
-    'lr_multiplier': 0.1,
+    'lr_multiplier': 0.2,
     'num_cycles': 5}
     train_model(**parameters)
