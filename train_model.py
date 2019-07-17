@@ -11,10 +11,10 @@ from image.datasets.yolo import YoloDataset, RandomLoader, SSDDataset
 from image.metrics.localization import PrecisionRecallMeanIOU
 from model_zoo import catalog
 from functools import partial
-from os.path import expanduser
+import argparse
+import os.path
 
-def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldir, logdir,
-    init_lr, cycle_length, device, lr_multiplier, num_cycles):
+def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_length, lr_multiplier, init_lr):
     """ Procedure that trains object recognition models
     Parameters:
         datadir: folder with train and test data
@@ -22,7 +22,7 @@ def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldi
     """
     model = catalog.MobilenetBase1chSplitHead()
 
-    train_names, test_names = get_filenames(datadir, channel)
+    train_names, test_names = get_filenames(datadir, 'nuclei')
 
     data_transforms = transforms.Compose([cv2transforms.AutoContrast()])
 
@@ -58,12 +58,12 @@ def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldi
         **test_dataset_parameters) for names in test_names])
 
     train_dataloader_parameters = {
-    'batch_size': train_batch,
+    'batch_size': 32,
     'shuffle': True,
     'num_workers': 2 }
 
     test_dataloader_parameters = {
-    'batch_size': train_batch,
+    'batch_size': 32,
     'shuffle': True,
     'num_workers': 2 }
 
@@ -96,6 +96,8 @@ def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldi
     scheduler_parameters = {
     'T_max': cycle_length }
 
+    logdir = os.path.join('runs', os.path.split(modeldir)[1])
+
     session = TrainSession(model,
                            lossfunc,
                            optimizer,
@@ -112,17 +114,15 @@ def train_model(datadir, channel, dataset_type, train_batch, test_batch, modeldi
         session.update_lr(lr_multiplier)
 
 if __name__ == "__main__":
-    parameters= {
-    'datadir': expanduser('~/workspace/fusion_data/Automate/20x/'),
-    'channel': 'nuclei',
-    'dataset_type': 'SSD',
-    'train_batch': 32,
-    'test_batch': 32,
-    'modeldir': 'models/mobilenet2_base_multianchor_split',
-    'logdir': 'runs/mobilenet2_base_multianchor_split',
-    'init_lr': 0.01,
-    'cycle_length': 100,
-    'device': 'cuda:0',
-    'lr_multiplier': 0.2,
-    'num_cycles': 5}
-    train_model(**parameters)
+    main_parser = argparse.ArgumentParser('Training script for object detection models')
+    main_parser.add_argument('datadir')
+    main_parser.add_argument('modeldir')
+    main_parser.add_argument('--dataset_type', default='SSD')
+    main_parser.add_argument('--init_lr', type=float, default=.01)
+    main_parser.add_argument('--cycle_length', type=int, default = 100)
+    main_parser.add_argument('--lr_multiplier', type=float, default=.5)
+    main_parser.add_argument('--num_cycles', type=int, default=5)
+    main_parser.add_argument('--device', type=int, required=True)
+    main_args = main_parser.parse_args()
+    main_args.device = torch.device(f'cuda:{main_args.device}')
+    train_model(**vars(main_args))
