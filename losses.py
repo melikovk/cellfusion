@@ -59,7 +59,7 @@ class ObjectDetectionLoss:
         if self.reduction == 'mean':
             loss_conf, loss_box = loss_conf/target.shape[0], loss_box/target.shape[0]
         if self.normalize_per_anchor:
-            loss_conf, loss_box = loss_conf/target.shape[2]
+            loss_conf = loss_conf/target.shape[2]
         loss = loss_conf + self.localization_weight*loss_box
         return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':self.localization_weight*loss_box}
 
@@ -126,7 +126,7 @@ def object_detection_loss(predict, target, reduction='mean', confidence_loss = '
     elif reduction != 'sum':
         raise ValueError("reduction should be 'mean' or 'sum'")
     if normalize_per_anchor:
-        loss_conf, loss_box = loss_conf/target.shape[2]
+        loss_conf = loss_conf/target.shape[2]
     loss = loss_conf + localization_weight*loss_box
     return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box}
 
@@ -163,7 +163,7 @@ def object_detection_loss_fast(predict, target, reduction='mean', confidence_los
     elif reduction != 'sum':
         raise ValueError("reduction should be 'mean' or 'sum'")
     if normalize_per_anchor:
-        loss_conf, loss_box = loss_conf/target.shape[2]
+        loss_conf = loss_conf/target.shape[2]
     loss = loss_conf + localization_weight*loss_box
     return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':localization_weight*loss_box}
 
