@@ -204,7 +204,7 @@ class TrainSession:
         if epochs is None:
              epochs = self.epochs_left
         if self.log_dir:
-            writer = SummaryWriter(self.log_dir)
+            writer = SummaryWriter(self.log_dir, purge_step = self.epoch)
         for epoch in range(epochs):
             self.epoch += 1
             self.epochs_left = epochs-epoch-1
