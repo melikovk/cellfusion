@@ -18,6 +18,13 @@ class Bottleneck(nn.Module):
         self.activation_dwise = nn.ReLU6()
         self.conv_shrink = nn.Conv2d(channels, out_channels, 1)
         self.bn_shrink = nn.BatchNorm2d(out_channels, momentum = bn_momentum)
+        # Parameter initialization
+        for layer in [self.conv_expand, self.conv_dwise, self.conv_shrink]:
+            init.kaiming_uniform_(layer.weight, mode='fan_in', nonlinearity='relu')
+            init.constant_(layer.bias, 0.0)
+        for layer in [self.bn_expand, self.bn_dwise, self.bn_shrink]:
+            init.constant_(layer.weight, 1.0)
+            init.constant_(layer.bias, 0.0)
 
     def forward(self, x):
         x = self.activation_expand(self.bn_expand(self.conv_expand(x)))

@@ -143,6 +143,15 @@ class ObjectDetectionHeadSplit(nn.Module):
             box_subnet[f'activ_{i}'] = _activation[activation](**act_args)
         box_subnet['out'] = nn.Conv2d(hidden_features[-1], 4*self.anchors, 1)
         self.box_subnet = nn.Sequential(box_subnet)
+        # Parameter initialization
+        for layer in self.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                init.constant_(layer.weight, 1.0)
+                init.constant_(layer.bias, 0.0)
+            if isinstance(layer, nn.Conv2d):
+                init.kaiming_uniform_(layer.weight, mode='fan_in', nonlinearity='relu')
+                init.constant_(layer.bias, 0.0)
+
 
     def forward(self, x):
         n = self.anchors
