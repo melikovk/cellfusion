@@ -30,7 +30,7 @@ def get_boxes_from_json(fname):
     return np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])
 
 def save_boxes_to_json(boxes, scores, fname):
-    probs = expit(scores)
+    probs = expit(scores).astype(float)
     records = [{'type':0, 'p':probs[idx], 'bounds':boxes[idx].round().astype(int).tolist()} for idx in range(probs.shape[0])]
     with open(fname, 'w') as f:
         json.dump(records, f)
