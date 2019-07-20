@@ -27,7 +27,7 @@ class ObjectDetectionLoss:
         localization_weight = 1, normalize_per_anchor = True, **kwargs):
         assert reduction == 'mean' or reduction == 'sum', \
             "reduction should be 'mean' or 'sum'"
-        assert confidence_loss in ['crossentropy', 'mse', 'focal_loss'], \
+        assert confidence_loss in ['crossentropy', 'mse', 'focal_loss', 'focal_loss*'], \
             "confidence_loss should be 'crossentropy' or 'mse'"
         assert size_transform in {'none', 'log', 'sqrt'}, \
             "size_transform should be 'none', 'log' or 'sqrt'"
@@ -50,8 +50,10 @@ class ObjectDetectionLoss:
             loss_conf = torch.masked_select(F.binary_cross_entropy_with_logits(predict[:,0,...], target[:,0,...], reduction='none'), object_mask).sum()
         elif self.confidence_loss == 'mse':
             loss_conf = torch.masked_select(F.mse_loss(torch.sigmoid(predict[:,0,...]), target[:,0,...], reduction='none'), object_mask).sum()
-        else:
+        elif self.confidence_loss == 'focal_loss':
             loss_conf = torch.masked_select(_focal_loss(predict[:,0,...], target[:,0,...], **self.kwargs), object_mask).sum()
+        else:
+            loss_conf = torch.masked_select(_focal_loss_star(predict[:,0,...], target[:,0,...], **self.kwargs), object_mask).sum()
         # Calculate loaclization loss
         box_mask = target[:,0:1,...] > 0.5
         loss_box = torch.masked_select(F.mse_loss(predict[:,1:3,...], target[:,1:3,...], reduction='none'), box_mask).sum()
@@ -93,12 +95,24 @@ def _focal_loss(predict, target, alpha=.25, gamma=2.0, reduction='none'):
     device = predict.device
     p = torch.sigmoid(predict)
     loss = F.binary_cross_entropy_with_logits(predict, target, reduction='none')
-    loss = loss * torch.pow(torch.where(target > 0.5, p, 1-p), gamma)
-    loss = loss * torch.where(target > 0.5, torch.tensor(alpha).to(device), torch.tensor(1-alpha).to(device))
+    # This version is significantly slower for some reason when you run model training
+    # loss = loss * torch.pow(torch.where(target > 0.5, p, 1-p), gamma)
+    # loss = loss * torch.where(target > 0.5, torch.tensor(alpha).to(device), torch.tensor(1-alpha).to(device))
+    loss = loss * torch.pow(1 - p * target + (1-p)*(1-target), gamma)
+    loss = loss * (alpha * target + (1-alpha)*(1-target))
     if reduction == 'sum':
         loss = loss.sum()
     if reduction == 'mean':
-        loss = loss / loss.mean()
+        loss = loss.mean()
+    return loss
+
+def _focal_loss_star(predict, target, gamma=4.0, beta=0.0, reduction='none'):
+    device = predict.device
+    loss = F.binary_cross_entropy_with_logits(gamma*predict+beta, target, reduction='none')/gamma
+    if reduction == 'sum':
+        loss = loss.sum()
+    if reduction == 'mean':
+        loss = loss.mean()
     return loss
 
 def yolo1_loss(predict, target, reduction='mean', localization_weight = 1):
