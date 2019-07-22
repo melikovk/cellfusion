@@ -5,6 +5,20 @@ import torch.nn.functional as F
 from collections import OrderedDict
 from functools import partial
 
+class NormTanh(nn.Module):
+    """ Tanh normalized to be within min_val and max_mal """
+    def __init__(self, min_val=0., max_val=1.):
+        super().__init__()
+        self.min_val = min_val
+        self.max_val = max_val
+        assert self.max_val > self.min_val
+
+    def forward(self, x):
+        return (torch.tanh(x)+self.min_val+1)*self.max_val/(self.min_val+2)
+
+    def extra_repr(self):
+        return f'min_val={self.min_val}, max_val={self.max_val}'
+
 class AdaptiveMaxAvgPool2D(nn.Module):
     """ 2D pooling layer that concatenates results of AdaptiveMaxPool2d and AdaptiveAvgPool2d
         Parameters:
@@ -67,7 +81,7 @@ class ObjectDetectionHead(nn.Module):
     """
     def __init__(self, in_features, anchors = 1, activation='relu', hidden_features=[1024, 1024],
                  hidden_kernel=[3, 3], bn_args={'momentum':0.01}, act_args={},
-                 coordinate_transform = 'hardtanh', eps = 1e-5):
+                 coordinate_transform = 'tanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
             "You should provide kernel_size for each hidden convolutional layer"
         assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
@@ -75,10 +89,12 @@ class ObjectDetectionHead(nn.Module):
         super().__init__()
         self.anchors = anchors
         self.eps = torch.tensor(eps)
-        if coordinate_transform == 'hardtanh':
-            self.coord_func = partial(F.hardtanh, min_val=0., max_val=1.)
+        if coordinate_transform == 'tanh':
+            self.coord_func = NormTanh()
+        elif coordinate_transform == 'sigmoid':
+            self.coord_func = nn.Sigmoid()
         else:
-            self.coord_func = F.sigmoid
+            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
         self.activ0 = _activation[activation](**act_args)
         hidden_features = [in_features] + hidden_features
@@ -114,18 +130,20 @@ class ObjectDetectionHeadSplit(nn.Module):
     """
     def __init__(self, in_features, anchors=1, activation='relu', hidden_features=[256, 256, 256, 256],
                  hidden_kernel=[3, 3, 3, 3], bn_args={'momentum':0.01}, act_args={},
-                 coordinate_transform = 'hardtanh', eps = 1e-5):
+                 coordinate_transform = 'tanh', eps = 1e-5):
         assert len(hidden_features) == len(hidden_kernel), \
             "You should provide kernel_size for each hidden convolutional layer"
-        assert coordinate_transform == 'hardtanh' or coordinate_transform == 'sigmoid', \
-            "coordinate_transform should be 'hardtanh' or 'sigmoid'"
+        assert coordinate_transform in ['hardtanh', 'sigmoid', 'tanh'], \
+            "coordinate_transform should be 'hardtanh', 'tanh' or 'sigmoid'"
         super().__init__()
         self.eps = torch.tensor(eps)
         self.anchors = anchors
-        if coordinate_transform == 'hardtanh':
-            self.coord_func = partial(F.hardtanh, min_val=0., max_val=1.)
+        if coordinate_transform == 'tanh':
+            self.coord_func = NormTanh()
+        elif coordinate_transform == 'sigmoid':
+            self.coord_func = nn.Sigmoid()
         else:
-            self.coord_func = F.sigmoid
+            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
         self.activ0 = _activation[activation](**act_args)
         hidden_features = [in_features] + hidden_features
