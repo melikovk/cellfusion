@@ -326,13 +326,13 @@ def _map_param_ids_to_names(opt_state, model):
         g['params'] = [reverse_dict[i] for i in g['params']]
     return new_state
 
-def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale=None):
+def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale = None):
     img  = Image.open(imgname)
     w, h = img.size
     if upscale is not None:
         w = int(w*upscale)
         h = int(h*upscale)
-        img = img.resize((w,h), Image.NEAREST)
+        img = img.resize((w,h), resample = Image.NEAREST)
     w1 = (w//model.grid_size)*model.grid_size
     h1 = (h//model.grid_size)*model.grid_size
     wfactor = w / w1
@@ -348,5 +348,7 @@ def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale=N
         keep_idx = nms(boxes, scores, nms_threshold)
         boxes = boxes[keep_idx]
         scores = scores[keep_idx]
-    boxes = (boxes/upscale)*np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
+    boxes = boxes * np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
+    if upscale is not None:
+        boxes = boxes / upscale
     return boxes, scores
