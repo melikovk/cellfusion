@@ -327,6 +327,8 @@ def _map_param_ids_to_names(opt_state, model):
     return new_state
 
 def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale = None):
+    """ Given model and name of image file predict boxes
+    """
     img  = Image.open(imgname)
     w, h = img.size
     if upscale is not None:
@@ -352,3 +354,12 @@ def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale =
     if upscale is not None:
         boxes = boxes / upscale
     return boxes, scores
+
+def evaluate_model(model, fnames, eval_func, **kwargs):
+    """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
+    predictions = []
+    targets = []
+    for imgname, boxname in fnames:
+        predictions.append(predict_boxes(model, imgname, **kwargs))
+        targets.append(get_boxes_from_json(boxname))
+    return eval_func(predictions, targets)
