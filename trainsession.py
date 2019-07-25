@@ -6,7 +6,7 @@ from collections import OrderedDict, defaultdict
 from tensorboardX import SummaryWriter
 import skimage.io as io
 import numpy as np
-from image.datasets.yolo import labels_to_boxes, get_cell_anchors
+from image.datasets.yolo import labels_to_boxes, get_cell_anchors, get_boxes_from_json
 from image.metrics.localization import nms
 from image.cv2transforms import AutoContrast, Gamma
 from skimage.transform import rescale
@@ -359,7 +359,10 @@ def evaluate_model(model, fnames, eval_func, **kwargs):
     """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
     predictions = []
     targets = []
+    model.eval()
     for imgname, boxname in fnames:
-        predictions.append(predict_boxes(model, imgname, **kwargs))
-        targets.append(get_boxes_from_json(boxname))
+        p = predict_boxes(model, imgname, **kwargs)
+        predictions.append(p)
+        t = get_boxes_from_json(boxname, 1)
+        targets.append(t)
     return eval_func(predictions, targets)

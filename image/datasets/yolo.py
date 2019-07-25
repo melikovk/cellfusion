@@ -24,10 +24,10 @@ class RandomLoader(DataLoader):
             self.dataset.reset()
         return super().__iter__()
 
-def get_boxes_from_json(fname):
+def get_boxes_from_json(fname, type = NUCLEUS):
     with open(fname, 'r') as f:
         boxes = json.load(f)
-    return np.array([box['bounds'] for box in boxes if box['type'] == NUCLEUS])
+    return np.array([box['bounds'] for box in boxes if box['type'] == type])
 
 def save_boxes_to_json(boxes, scores, fname):
     probs = expit(scores).astype(float)
