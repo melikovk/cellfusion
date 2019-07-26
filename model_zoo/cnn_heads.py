@@ -164,12 +164,11 @@ class ObjectDetectionHeadSplit(nn.Module):
         # Parameter initialization
         for layer in self.modules():
             if isinstance(layer, nn.BatchNorm2d):
-                init.constant_(layer.weight, 1.0)
-                init.constant_(layer.bias, 0.0)
+                init.ones_(layer.weight)
+                init.zeros_(layer.bias)
             if isinstance(layer, nn.Conv2d):
                 init.kaiming_uniform_(layer.weight, mode='fan_in', nonlinearity='relu')
-                init.constant_(layer.bias, 0.0)
-
+                init.zeros_(layer.bias)
 
     def forward(self, x):
         n = self.anchors

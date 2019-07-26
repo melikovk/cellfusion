@@ -21,10 +21,10 @@ class Bottleneck(nn.Module):
         # Parameter initialization
         for layer in [self.conv_expand, self.conv_dwise, self.conv_shrink]:
             init.kaiming_uniform_(layer.weight, mode='fan_in', nonlinearity='relu')
-            init.constant_(layer.bias, 0.0)
+            init.zeros_(layer.bias)
         for layer in [self.bn_expand, self.bn_dwise, self.bn_shrink]:
-            init.constant_(layer.weight, 1.0)
-            init.constant_(layer.bias, 0.0)
+            init.ones_(layer.weight)
+            init.zeros_(layer.bias)
 
     def forward(self, x):
         x = self.activation_expand(self.bn_expand(self.conv_expand(x)))
