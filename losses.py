@@ -59,7 +59,7 @@ class ObjectDetectionLoss:
         loss_box = torch.masked_select(F.mse_loss(predict[:,1:3,...], target[:,1:3,...], reduction='none'), box_mask).sum()
         # Transform box sizes if requested
         if self.size_transform == 'log':
-            loss_box += torch.masked_select(F.mse_loss(predict[:,3:,...].log(), target[:,3:,...].log(), reduction='none'), box_mask).sum()
+            loss_box += F.mse_loss(torch.masked_select(predict[:,3:,...], box_mask).log(), torch.masked_select(target[:,3:,...], box_mask).log(), reduction='sum')
         elif self.size_transform == 'sqrt':
             loss_box += torch.masked_select(F.mse_loss(predict[:,3:,...].sqrt(), target[:,3:,...].sqrt(), reduction='none'), box_mask).sum()
         else:
