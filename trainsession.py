@@ -170,6 +170,7 @@ class TrainSession:
         self.epochs_left = 0
 
     def train_step(self, inputs, labels):
+        # with torch.autograd.detect_anomaly():
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.lossfunc(outputs, labels)
@@ -271,6 +272,7 @@ class TrainSession:
                  'epochs_left': self.epochs_left,
                  'model': self.model.state_dict(),
                  'model_type': {'name':type(self.model).__name__, 'module':type(self.model).__module__},
+                 'model_config': self.model.config,
                  'optimizer': _map_param_ids_to_names(self.optimizer.state_dict(), self.model),
                  'optimizer_type': {'name':type(self.optimizer).__name__, 'module':type(self.optimizer).__module__},
                  'lossfunc':self.lossfunc.state_dict(),
@@ -303,7 +305,7 @@ class TrainSession:
 
     @classmethod
     def restore_from_state_dict(cls, state, device = None):
-        model = getattr(import_module(state['model_type']['module']), state['model_type']['name'])()
+        model = getattr(import_module(state['model_type']['module']), state['model_type']['name'])(state['model_config'])
         lossfunc = getattr(import_module(state['lossfunc_type']['module']), state['lossfunc_type']['name'])()
         acc_func = getattr(import_module(state['acc_func_type']['module']), state['acc_func_type']['name'])()
         named_params = dict(model.named_parameters())
@@ -329,6 +331,7 @@ def _map_param_ids_to_names(opt_state, model):
 def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale = None):
     """ Given model and name of image file predict boxes
     """
+    model.eval()
     img  = Image.open(imgname)
     w, h = img.size
     if upscale is not None:
@@ -359,7 +362,6 @@ def evaluate_model(model, fnames, eval_func, **kwargs):
     """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
     predictions = []
     targets = []
-    model.eval()
     for imgname, boxname in fnames:
         p = predict_boxes(model, imgname, **kwargs)
         predictions.append(p)

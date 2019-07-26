@@ -20,7 +20,12 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
         datadir: folder with train and test data
         device:  device to use for training
     """
-    model = catalog.MobilenetBase1chSplitHead()
+    anchors = 'anchors1'
+    features_params = {'in_channels': 1}
+    head_params = {'in_features': 320,
+                   'coordinate_transform':'tanh'}
+
+    model = catalog.MobileNetSplitHead(anchors, features_params, head_params)
 
     train_names, test_names = get_filenames(datadir, 'nuclei')
 
