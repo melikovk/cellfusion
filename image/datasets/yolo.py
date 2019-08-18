@@ -38,32 +38,46 @@ def save_boxes_to_json(boxes, scores, fname):
 class CropDataset(Dataset):
     """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
-    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, transforms=None, sample='random', length = None, seed=None, stride=None):
-        self._img = np.asarray(Image.open(imgname)).T
+    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None, sample='random', length = None, seed=None, stride=None):
+        self._img_orig = np.asarray(Image.open(imgname)).T
         self._w, self._h = win_size
         self._grid_size = grid_size
         self._border_size = border_size
-        self._transforms = transforms
+        self._point_transforms = point_transforms
+        self._geom_transforms = geom_transforms
+        self._norm_transform = norm_transform
+        self._sample = sample
+        self._length = length
+        self._stride = stride
+        self._seed = seed
         # Create array ob object boxes
-        self._boxes = get_boxes_from_json(lblname)/grid_size
-        # self._boxes[:,:2] = self._boxes[:,:2] + self._boxes[:,2:]/2
-        self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
+        self._boxes_orig = get_boxes_from_json(lblname)
+        self._img, self._boxes = self._data_augmentation()
+        # self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
+        self._xys = self._init_coordinates()
 
-    def _init_coordinates(self, sample, length, seed, stride):
-        if sample == 'random':
-            self._seed = seed
-            if length is None:
-                length = self._img.shape[-1]*self._img.shape[-2] // (self._w*self._h)
+    def _data_augmentation(self):
+        img = self._img_orig.astype(np.float32)
+        boxes = self._boxes_orig.astype(np.float32)
+        for f in self._point_transforms:
+            img = f(img)
+        for f in self._geom_transforms:
+            img, boxes = f(img, boxes)
+        if self._norm_transform is not None:
+            img = self._norm_transform(img)
+        boxes = boxes/self._grid_size
+        return img, boxes
+
+    def _init_coordinates(self):
+        if self._sample == 'random':
             if self._seed is not None:
                 np.random.seed(self._seed)
+            length = self._img.shape[-1]*self._img.shape[-2] // (self._w*self._h) if self._length is None else self._length
             xs = np.random.randint(self._border_size, self._img.shape[-2]-self._border_size-self._w, length)
             ys = np.random.randint(self._border_size, self._img.shape[-1]-self._border_size-self._h, length)
-
             return np.stack((xs,ys), axis=-1)
-        elif sample == 'grid':
-            self._seed = 0
-            if stride is None:
-                stride = (self._w, self._h)
+        elif self._sample == 'grid':
+            stride = (self._w, self._h) if self._stride is None else self._stride
             xrange = np.arange(self._border_size, self._img.shape[-2] - self._border_size - self._w, stride[0])
             yrange = np.arange(self._border_size, self._img.shape[-1] - self._border_size - self._h, stride[1])
             return np.stack(np.meshgrid(xrange, yrange, indexing = 'ij')).reshape(2,-1).T
@@ -80,8 +94,8 @@ class CropDataset(Dataset):
 
     def __getitem__(self, idx):
         img = self._get_crop(idx)
-        if self._transforms is not None:
-            img = self._transforms(img)
+        # if self._transforms is not None:
+        #     img = self._transforms(img)
         if len(img.shape) < 3:
             img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
         else:
@@ -90,8 +104,11 @@ class CropDataset(Dataset):
         return (img, labels)
 
     def reset(self):
-        if self._seed is None:
-            self._xys = self._init_coordinates(sample='random', length=self._xys.shape[0], seed=None, stride=None)
+        self._img, self._boxes = self._data_augmentation()
+        self._xys = self._init_coordinates()
+        # if self._seed is None:
+        #     self._xys = self._init_coordinates(sample='random', length=self._xys.shape[0], seed=None, stride=None)
+
 
 class NaiveBoxDataset(CropDataset):
     """ Simple dataset class to be used in pytorch
