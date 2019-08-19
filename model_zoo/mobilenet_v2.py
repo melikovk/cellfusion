@@ -42,10 +42,11 @@ class ResidualBottleneck(Bottleneck):
 
 class Block(nn.Module):
 
-    def __init__(self, in_channels, out_channels, repeat = 1, stride = 2, expansion = 6, bn_momentum = .01):
+    def __init__(self, in_channels, out_channels, repeats = 1, stride = 2, expansion = 6, bn_momentum = .01):
         super().__init__()
         self.linear_btlneck = Bottleneck(in_channels, out_channels, stride, expansion, bn_momentum)
-        for i in range(1, repeat):
+        self.linear_activation = nn.ReLU6()
+        for i in range(1, repeats):
             self.add_module(f'res_btlneck_{i}', ResidualBottleneck(out_channels, expansion, bn_momentum))
 
     def forward(self,x):
@@ -59,8 +60,15 @@ class MobileNetV2(nn.Module):
         super().__init__()
         self.grid_size = np.prod(strides)*2
         self.conv_init = nn.Conv2d(in_channels, out_channels[0], 3, stride=2, padding=1)
+        self.bn_init = nn.BatchNorm2d(out_channels[0], momentum=bn_momentum)
+        self.activation_init = nn.ReLU6()
         for i in range(len(expansions)):
             self.add_module(f'block_{i+1}',Block(out_channels[i], out_channels[i+1], repeats[i], strides[i], expansions[i], bn_momentum))
+        # Parameter initialization
+        init.kaiming_uniform_(self.conv_init.weight, mode='fan_in', nonlinearity='relu')
+        init.zeros_(self.conv_init.bias)
+        init.ones_(self.bn_init.weight)
+        init.zeros_(self.bn_init.bias)
 
     def forward(self,x):
         for m in self.children():
