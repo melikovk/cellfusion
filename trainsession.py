@@ -16,13 +16,13 @@ import math
 
 autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
 
-def get_filenames(datadir, channel):
+def get_filenames(datadir, channel, boxes = 'boxes/'):
     channel += '/'
     with open(datadir+'train.txt') as f:
-        train_names = [(datadir+channel+name[:-1]+'.tif', datadir+'boxes/'+name[:-1]+'boxes.json')
+        train_names = [(datadir+channel+name[:-1]+'.tif', datadir+boxes+name[:-1]+'boxes.json')
                         for name in f.readlines()]
     with open(datadir+'test.txt') as f:
-        test_names = [(datadir+channel+name[:-1]+'.tif', datadir+'boxes/'+name[:-1]+'boxes.json')
+        test_names = [(datadir+channel+name[:-1]+'.tif', datadir+boxes+name[:-1]+'boxes.json')
                         for name in f.readlines()]
     return train_names, test_names
 

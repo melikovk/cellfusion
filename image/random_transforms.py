@@ -66,13 +66,13 @@ class RandomFlip:
         np.random.seed(self.seed)
         out_img = img
         out_boxes = boxes
-        choice = np.randint(3)
+        choice = np.random.randint(3)
         if choice == 0:
             out_img = np.flip(out_img, axis=-2)
-            out_boxes[0] = out_img.shape[-2]-1-out_boxes[0]
+            out_boxes[:,0] = out_img.shape[-2]-1-out_boxes[:,0]
         elif choice == 1:
             out_img = np.flip(out_img, axis=-1)
-            out_boxes[1] = out_img.shape[-1]-1-out_boxes[1]
+            out_boxes[:,1] = out_img.shape[-1]-1-out_boxes[:,1]
         return out_img, out_boxes
 
 class RandomZoom:
@@ -94,5 +94,5 @@ class RandomZoom:
         out_img = ndimage.zoom(img, zooms)
         x_zoom = out_img.shape[-2]/img.shape[-2]
         y_zoom = out_img.shape[-1]/img.shape[-1]
-        out_boxes = boxes*np.array([x_zoom,y_zoom]*2).reshape(4,1)
+        out_boxes = boxes*np.array([x_zoom,y_zoom]*2)
         return out_img, out_boxes
