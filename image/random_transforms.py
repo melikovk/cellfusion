@@ -1,48 +1,48 @@
 import scipy.ndimage as ndimage
 import numpy as np
+from PIL import Image
+import cv2
 
 class RandomGamma:
     def __init__(self, min_gamma=.5, max_gamma=1., seed=None):
         self.min_gamma = min_gamma
         self.max_gamma = max_gamma
-        self.seed = seed
+        self.gen = np.random.RandomState(seed)
 
     def __call__(self, img):
-        np.random.seed(self.seed)
-        gamma = np.random.uniform(low=self.min_gamma, high=self.max_gamma)
-        return img**gamma
+        gamma = self.gen.uniform(low=self.min_gamma, high=self.max_gamma)
+        return cv2.pow(img, gamma)
 
 class RandomContrast:
     def __init__(self, blur_max_sigma = 4, deblur_max_sigma = 4, deblur_k=.6, seed=None):
         self.blur_max_sigma = blur_max_sigma
         self.deblur_max_sigma = deblur_max_sigma
         self.deblur_k = deblur_k
-        self.seed = seed
+        self.gen = np.random.RandomState(seed)
 
     def __call__(self, img):
-        np.random.seed(self.seed)
-        isblur = np.random.randint(2) == 1
+        isblur = self.gen.randint(2) == 1
         if isblur:
-            sigma = np.random.uniform(low=0, high=self.blur_max_sigma)
-            out = ndimage.gaussian_filter1d(img, sigma, axis=-1, mode='constant')
-            out = ndimage.gaussian_filter1d(out, sigma, axis=-2, mode='constant')
+            sigma = self.gen.uniform(low=0, high=self.blur_max_sigma)
+            # out = ndimage.gaussian_filter1d(img, sigma, axis=-1, mode='constant')
+            # out = ndimage.gaussian_filter1d(out, sigma, axis=-2, mode='constant')
+            out = cv2.GaussianBlur(img, (0,0), sigma)
         else:
-            sigma = np.random.uniform(low=0, high=self.deblur_max_sigma)
-            out = ndimage.gaussian_filter1d(img, sigma, axis=-1, mode='constant')
-            out = ndimage.gaussian_filter1d(out, sigma, axis=-2, mode='constant')
+            sigma = self.gen.uniform(low=0, high=self.deblur_max_sigma)
+            # out = ndimage.gaussian_filter1d(img, sigma, axis=-1, mode='constant')
+            # out = ndimage.gaussian_filter1d(out, sigma, axis=-2, mode='constant')
+            out = cv2.GaussianBlur(img, (0,0), sigma)
             out = (img - out*self.deblur_k)/(1-self.deblur_k)
         return out
 
 class RandomBlur:
     def __init__(self, blur_max_sigma = 4, seed=None):
         self.blur_max_sigma = blur_max_sigma
-        self.seed = seed
+        self.gen = np.random.RandomState(seed)
 
     def __call__(self, img):
-        np.random.seed(self.seed)
-        sigma = np.random.uniform(low=0, high=self.blur_max_sigma)
-        out = ndimage.gaussian_filter1d(img, sigma, axis=-1, mode='constant')
-        out = ndimage.gaussian_filter1d(out, sigma, axis=-2, mode='constant')
+        sigma = self.gen.uniform(low=0, high=self.blur_max_sigma)
+        out = cv2.GaussianBlur(img, (0,0), sigma)
         return out
 
 class AutoContrast:
@@ -60,18 +60,17 @@ class AutoContrast:
 
 class RandomFlip:
     def __init__(self, seed=None):
-        self.seed = seed
+        self.gen = np.random.RandomState(seed)
 
     def __call__(self, img, boxes):
-        np.random.seed(self.seed)
         out_img = img
         out_boxes = boxes
-        choice = np.random.randint(3)
+        choice = self.gen.randint(3)
         if choice == 0:
-            out_img = np.flip(out_img, axis=-2)
+            out_img = cv2.flip(out_img, flipCode=0)
             out_boxes[:,0] = out_img.shape[-2]-1-out_boxes[:,0]
         elif choice == 1:
-            out_img = np.flip(out_img, axis=-1)
+            out_img = cv2.flip(out_img, flipCode=1)
             out_boxes[:,1] = out_img.shape[-1]-1-out_boxes[:,1]
         return out_img, out_boxes
 
@@ -80,19 +79,18 @@ class RandomZoom:
         self.min_zoom = min_zoom
         self.max_zoom = max_zoom
         self.keep_aspect = keep_aspect
-        self.seed = seed
+        self.gen = np.random.RandomState(seed)
 
     def __call__(self, img, boxes):
-        np.random.seed(self.seed)
         if self.keep_aspect:
-            x_zoom = y_zoom = np.random.uniform(low=self.min_zoom, high=self.max_zoom)
+            fx = fy = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
         else:
-            x_zoom = np.random.uniform(low=self.min_zoom, high=self.max_zoom)
-            y_zoom = np.random.uniform(low=self.min_zoom, high=self.max_zoom)
-        zooms = np.ones(img.ndim)
-        zooms[-2:] = (x_zoom, y_zoom)
-        out_img = ndimage.zoom(img, zooms)
-        x_zoom = out_img.shape[-2]/img.shape[-2]
-        y_zoom = out_img.shape[-1]/img.shape[-1]
-        out_boxes = boxes*np.array([x_zoom,y_zoom]*2)
+            fx = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
+            fy = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
+        # new_x, new_y = int(img.shape[-2]*x_zoom), int(img.shape[-1]*y_zoom)
+        # out_img = np.asarray(Image.fromarray(img).resize((new_y, new_x), Image.BICUBIC))
+        out_img = cv2.resize(img, dsize=(0,0), fx=fx, fy=fy, interpolation=cv2.INTER_CUBIC)
+        fx = out_img.shape[-2]/img.shape[-2]
+        fy = out_img.shape[-1]/img.shape[-1]
+        out_boxes = boxes*np.array([fx,fy]*2)
         return out_img, out_boxes
