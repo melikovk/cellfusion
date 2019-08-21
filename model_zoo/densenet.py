@@ -81,7 +81,8 @@ class DenseNet(nn.Module):
         self.conv_init = nn.Conv2d(in_channels, out_channels, kernel_size = 7, stride = 2, padding = 3)
         self.bn_init = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
         self.activation_init = nn.ReLU6()
-        self.pooling_init = nn.MaxPool2d(3, stride=2)
+        self.pooling_init = nn.MaxPool2d(3, stride=2, padding = 1)
+        self.grid_size = 4 * 2**(len(repeats)-1)
         for i in range(len(repeats)-1):
             self.add_module(f'dense_block_{i}', DenseBlock(out_channels, repeats = repeats[i],
                  growth_rate = growth_rate, expansion=expansion, bn_momentum = bn_momentum))
