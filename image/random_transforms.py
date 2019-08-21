@@ -68,10 +68,10 @@ class RandomFlip:
         choice = self.gen.randint(3)
         if choice == 0:
             out_img = cv2.flip(out_img, flipCode=0)
-            out_boxes[:,0] = out_img.shape[-2]-1-out_boxes[:,0]
+            out_boxes[:,0] = out_img.shape[-2]-1-out_boxes[:,0]-out_boxes[:,2]
         elif choice == 1:
             out_img = cv2.flip(out_img, flipCode=1)
-            out_boxes[:,1] = out_img.shape[-1]-1-out_boxes[:,1]
+            out_boxes[:,1] = out_img.shape[-1]-1-out_boxes[:,1]-out_boxes[:,3]
         return out_img, out_boxes
 
 class RandomZoom:
