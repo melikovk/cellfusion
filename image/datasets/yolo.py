@@ -7,6 +7,8 @@ from ..metrics.localization import iou
 import torch
 import math
 from scipy.special import expit
+import matplotlib.pyplot as plt
+from matplotlib import patches
 
 NUCLEUS = 0
 BKG = 1
@@ -325,3 +327,25 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
     boxes[0] += offx
     boxes[1] += offy
     return boxes.T, scores
+
+def show_boxes(image, labels, grid_size, cell_anchors, threshold=0.5):
+    """
+        Function to display image and bounding boxes given the output of CropDataset
+    """
+    f, ax = plt.subplots()
+    img = image.numpy()[0].T
+    boxes, scores = labels_to_boxes(labels, grid_size, cell_anchors, threshold)
+    if len(boxes) > 0:
+        xmin, ymin = min(0, boxes[:,0].min()), min(0, boxes[:,1].min())
+        xmax, ymax = max(img.shape[0],(boxes[:,0]+boxes[:,2]).max()), max(img.shape[1],(boxes[:,1]+boxes[:,3]).max())
+    else:
+        xmin, ymin, xmax, ymax = 0, 0, img.shape[0], img.shape[1]
+    ax.imshow(img)
+    ax.tick_params(left= True,bottom= True)
+    ax.set_axis_off()
+    for box in boxes:
+        rect = patches.Rectangle(box[0:2], *box[-2:], fill=False, edgecolor='red')
+        ax.add_patch(rect)
+#     rect = patches.Rectangle((-xmin,-ymin), *img.shape, fill=False, edgecolor='green')
+#     ax.add_patch(rect)
+    ax.set(xlim=(xmin-5,xmax+5), ylim=(ymax+5, ymin-5))
