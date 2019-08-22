@@ -64,7 +64,7 @@ class ConvolutionalBlock(nn.Module):
         super().__init__()
         hidden_features = [in_features] + hidden_features
         for i in range(1, len(hidden_features)):
-            self.add_module(f'conv_{i}', nn.Conv2d(hidden_features[i-1], hidden_features[i], hidden_kernels[i-1], padding = hidden_kernels[i-1]//2))
+            self.add_module(f'conv2d_{i}', nn.Conv2d(hidden_features[i-1], hidden_features[i], hidden_kernels[i-1], padding = hidden_kernels[i-1]//2))
             self.add_module(f'bn_{i}', nn.BatchNorm2d(hidden_features[i], **bn_args))
             self.add_module(f'activ_{i}', _activation[activation](**act_args))
         self.out = nn.Conv2d(hidden_features[-1], out_features, 1)

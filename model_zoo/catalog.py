@@ -26,7 +26,7 @@ class MobileNetSplitHead(ObjectDetectionModel):
     """
     def __init__(self, anchors, features_params, head_params):
         self.config = {'anchors': anchors,
-                       'features_param': features_params,
+                       'features_params': features_params,
                        'head_params': head_params}
         cell_anchors = ANCHORS[anchors].copy()
         super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplit( anchors = len(cell_anchors), **head_params), cell_anchors)

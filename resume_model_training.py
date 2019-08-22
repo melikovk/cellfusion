@@ -22,7 +22,7 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
         device:  device to use for training
     """
 
-    session_state = torch.load(modelfile. map_location='cpu')
+    session_state = torch.load(modelfile, map_location='cpu')
 
     session = TrainSession.restore_from_state_dict(session_state, device)
 
@@ -37,7 +37,7 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
     train_dataset_parameters = {
     'win_size': (224, 224),
     'border_size': 32,
-    'window_overlap_threshold': .9,
+    'window_overlap_threshold': .7,
     'grid_size': session.model.features.grid_size,
     'length': 500}
     if dataset_type == 'SSD':
@@ -87,7 +87,7 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
     scheduler_parameters = {
     'T_max': cycle_length }
 
-    logdir = os.path.join('runs', os.path.split(modeldir)[1])
+    logdir = os.path.join('runs', os.path.split(modelfile)[1])
 
     # Finish last unfinished training cycle
     session.train(trainDataLoader, testDataLoader)
@@ -110,4 +110,4 @@ if __name__ == "__main__":
     main_parser.add_argument('--device', type=int, required=True)
     main_args = main_parser.parse_args()
     main_args.device = torch.device(f'cuda:{main_args.device}')
-    train_model(**vars(main_args))
+    resume_model_training(**vars(main_args))

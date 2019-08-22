@@ -305,7 +305,7 @@ class TrainSession:
 
     @classmethod
     def restore_from_state_dict(cls, state, device = None):
-        model = getattr(import_module(state['model_type']['module']), state['model_type']['name'])(state['model_config'])
+        model = getattr(import_module(state['model_type']['module']), state['model_type']['name'])(**state['model_config'])
         lossfunc = getattr(import_module(state['lossfunc_type']['module']), state['lossfunc_type']['name'])()
         acc_func = getattr(import_module(state['acc_func_type']['module']), state['acc_func_type']['name'])()
         named_params = dict(model.named_parameters())
