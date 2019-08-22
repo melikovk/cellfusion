@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+from model_zoo.mobilenet_v2 import Block as ResidualBottleneckBlock
 
 class NormTanh(nn.Module):
     """ Tanh normalized to be within min_val and max_mal """
@@ -171,6 +172,39 @@ class ObjectDetectionHeadSplit(nn.Module):
         x = self.activ0(self.bn0(x))
         x_obj = self.object_subnet(x)
         x_box = self.box_subnet(x)
+        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps.to(x.device))], dim = 1)
+        return x
+
+class ObjectDetectionHeadSplitResBtlneck(nn.Module):
+    def __init__(self, in_features, anchors=1, activation='relu', repeats = 4, hidden_features = 256, expansion = 3,
+                 bn_args={'momentum':0.01}, act_args={}, coordinate_transform='tanh', eps=1e-5):
+        assert coordinate_transform in ['hardtanh', 'sigmoid', 'tanh'], \
+            "coordinate_transform should be 'hardtanh', 'tanh' or 'sigmoid'"
+        super().__init__()
+        self.eps = torch.tensor(eps)
+        self.anchors = anchors
+        if coordinate_transform == 'tanh':
+            self.coord_func = NormTanh()
+        elif coordinate_transform == 'sigmoid':
+            self.coord_func = nn.Sigmoid()
+        else:
+            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
+        self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
+        self.activ0 = _activation[activation](**act_args)
+
+        self.object_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features, repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
+        self.object_out = nn.Conv2d(hidden_features, self.anchors, 1)
+        self.box_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features, repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
+        self.box_out = nn.Conv2d(hidden_features, 4*self.anchors, 1)
+        # Parameter initialization
+        init.ones_(self.bn0.weight)
+        init.zeros_(self.bn0.bias)
+
+    def forward(self,x):
+        n = self.anchors
+        x = self.activ0(self.bn0(x))
+        x_obj = self.object_out(self.object_subnet(x))
+        x_box = self.box_out(self.box_subnet(x))
         x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps.to(x.device))], dim = 1)
         return x
 

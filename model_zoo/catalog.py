@@ -1,5 +1,5 @@
 from .mobilenet_v2 import MobileNetV2
-from .cnn_heads import ObjectDetectionHead, ObjectDetectionHeadSplit
+from .cnn_heads import ObjectDetectionHead, ObjectDetectionHeadSplit, ObjectDetectionHeadSplitResBtlneck
 from .vision_models import ObjectDetectionModel
 from image.datasets.yolo import get_cell_anchors
 from .densenet import DenseNet121, DenseNet169, DenseNet201, DenseNet264
@@ -29,7 +29,15 @@ class MobileNetSplitHead(ObjectDetectionModel):
                        'features_params': features_params,
                        'head_params': head_params}
         cell_anchors = ANCHORS[anchors].copy()
-        super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplit( anchors = len(cell_anchors), **head_params), cell_anchors)
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplit(anchors = len(cell_anchors), **head_params), cell_anchors)
+
+class MobileNetSplitResBtlneckHead(ObjectDetectionModel):
+    def __init__(self, anchors, features_params, head_params):
+        self.config = {'anchors': anchors,
+                       'features_params': features_params,
+                       'head_params': head_params}
+        cell_anchors = ANCHORS[anchors].copy()
+        super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplitResBtlneck(anchors = len(cell_anchors), **head_params), cell_anchors)
 
 class DenseNetSplitHead(ObjectDetectionModel):
     """ Object detection model with DenseNet feature extractor
@@ -55,7 +63,7 @@ class DenseNetSplitHead(ObjectDetectionModel):
             head_params['in_features'] = 2688
         else:
             raise ValueError('Incorrect value for densenet parameter')
-        super().__init__(features_model(features_params['in_channels']), ObjectDetectionHeadSplit( anchors = len(cell_anchors), **head_params), cell_anchors)
+        super().__init__(features_model(features_params['in_channels']), ObjectDetectionHeadSplit(anchors = len(cell_anchors), **head_params), cell_anchors)
 
 
 # class MobilenetBase1ch(ObjectDetectionModel):
