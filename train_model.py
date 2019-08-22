@@ -8,7 +8,7 @@ import image.cv2transforms as cv2transforms
 from losses import ObjectDetectionLoss
 from model_zoo.vision_models import ObjectDetectionModel
 from image.datasets.yolo import YoloDataset, RandomLoader, SSDDataset
-from image.metrics.localization import PrecisionRecallMeanIOU
+from image.metrics.localization import PrecisionRecallF1MeanIOU
 from model_zoo import catalog
 from functools import partial
 from image.random_transforms import RandomGamma, RandomContrast, RandomFlip, RandomZoom, AutoContrast
@@ -97,7 +97,7 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     'iou_thresholds': [0.5, 0.7, 0.9],
     'nms_threshold': 0.8}
 
-    accuracy = PrecisionRecallMeanIOU(**accuracy_parameters)
+    accuracy = PrecisionRecallF1MeanIOU(**accuracy_parameters)
 
     saver = SessionSaver(modeldir)
 

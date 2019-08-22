@@ -422,7 +422,7 @@ def precision_recall_meanIOU(predict, target, iou_thresholds, nms_threshold = 0.
     results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
     return results
 
-class PrecisionRecallMeanIOU:
+class PrecisionRecallF1MeanIOU:
     def __init__(self, iou_thresholds=[0.5,0.8,.95], nms_threshold = 0.8):
         self.iou_thresholds = iou_thresholds
         self.nms_threshold = nms_threshold
@@ -449,6 +449,7 @@ class PrecisionRecallMeanIOU:
             tp, fp, fn = counts[i]
             results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
             results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
+            results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
         ious = np.concatenate(ious)
         results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
         return results
