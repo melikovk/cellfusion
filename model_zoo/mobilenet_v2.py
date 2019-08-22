@@ -50,7 +50,7 @@ class Block(nn.Module):
             self.add_module(f'res_btlneck_{i}', ResidualBottleneck(out_channels, expansion, bn_momentum))
 
     def forward(self,x):
-        for m in self.children():
+        for m in self._modules.values():
             x = m(x)
         return x
 
@@ -71,6 +71,6 @@ class MobileNetV2(nn.Module):
         init.zeros_(self.bn_init.bias)
 
     def forward(self,x):
-        for m in self.children():
+        for m in self._modules.values():
             x = m(x)
         return x
