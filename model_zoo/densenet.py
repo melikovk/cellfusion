@@ -12,17 +12,17 @@ to create new feature maps
 """
 
 class NewFeatures(nn.Module):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, bn_momentum = .01):
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, bn_args={'momentum':0.01}):
         super().__init__()
         channels = expansion*growth_rate
         self.conv_expand = nn.Conv2d(in_channels, channels, 1)
-        self.bn_expand = nn.BatchNorm2d(channels, momentum = bn_momentum)
+        self.bn_expand = nn.BatchNorm2d(channels, **bn_args)
         self.activation_expand = nn.ReLU6()
         self.conv_dwise = nn.Conv2d(channels, channels, 3, padding = 1, groups = channels)
-        self.bn_dwise = nn.BatchNorm2d(channels, momentum = bn_momentum)
+        self.bn_dwise = nn.BatchNorm2d(channels, **bn_args)
         self.activation_dwise = nn.ReLU6()
         self.conv_shrink = nn.Conv2d(channels, growth_rate, 1)
-        self.bn_shrink = nn.BatchNorm2d(growth_rate, momentum = bn_momentum)
+        self.bn_shrink = nn.BatchNorm2d(growth_rate, **bn_args)
         self.activation_shrink = nn.ReLU6()
         # Parameter initialization
         for layer in [self.conv_expand, self.conv_dwise, self.conv_shrink]:
@@ -39,18 +39,18 @@ class NewFeatures(nn.Module):
         return x
 
 class DenseLayer(NewFeatures):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, bn_momentum = .01):
-        super().__init__(in_channels, growth_rate = growth_rate, expansion = expansion, bn_momentum = bn_momentum)
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, bn_args={'momentum':0.01}):
+        super().__init__(in_channels, growth_rate = growth_rate, expansion = expansion, bn_args = bn_args)
 
     def forward(self, x):
         return torch.cat([x, super().forward(x)], dim=1)
 
 class TransitionLayer(nn.Module):
-    def __init__(self, in_channels, compression = 2, bn_momentum=.01):
+    def __init__(self, in_channels, compression = 2, bn_args={'momentum':0.01}):
         super().__init__()
         out_channels = in_channels // compression
         self.conv  = nn.Conv2d(in_channels, out_channels, 1)
-        self.bn = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
+        self.bn = nn.BatchNorm2d(out_channels, **bn_args)
         self.activation = nn.ReLU6()
         self.pool = nn.AvgPool2d(2)
         # Parameter initialization
@@ -63,11 +63,11 @@ class TransitionLayer(nn.Module):
         return self.pool(self.activation(self.bn(self.conv(x))))
 
 class DenseBlock(nn.Module):
-    def __init__(self, in_channels, repeats, growth_rate = 32, expansion = 4, bn_momentum = .01):
+    def __init__(self, in_channels, repeats, growth_rate = 32, expansion = 4, bn_args={'momentum':0.01}):
         super().__init__()
         for i in range(repeats):
             self.add_module(f'dense_layer_{i}', DenseLayer(in_channels + i*growth_rate,
-                 growth_rate = growth_rate, expansion=expansion, bn_momentum = bn_momentum))
+                 growth_rate = growth_rate, expansion=expansion, bn_args = bn_args))
 
     def forward(self, x):
         for m in self.children():
@@ -75,23 +75,23 @@ class DenseBlock(nn.Module):
         return x
 
 class DenseNet(nn.Module):
-    def __init__(self, in_channels, repeats, growth_rate = 32, expansion = 4, compression = 2, bn_momentum = .01):
+    def __init__(self, in_channels, repeats, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__()
         out_channels = 2*growth_rate
         self.conv_init = nn.Conv2d(in_channels, out_channels, kernel_size = 7, stride = 2, padding = 3)
-        self.bn_init = nn.BatchNorm2d(out_channels, momentum=bn_momentum)
+        self.bn_init = nn.BatchNorm2d(out_channels, **bn_args)
         self.activation_init = nn.ReLU6()
         self.pooling_init = nn.MaxPool2d(3, stride=2, padding = 1)
         self.grid_size = 4 * 2**(len(repeats)-1)
         for i in range(len(repeats)-1):
             self.add_module(f'dense_block_{i}', DenseBlock(out_channels, repeats = repeats[i],
-                 growth_rate = growth_rate, expansion=expansion, bn_momentum = bn_momentum))
+                 growth_rate = growth_rate, expansion=expansion, bn_args = bn_args))
             out_channels += growth_rate*repeats[i]
-            self.add_module(f'transition_layer_{i}', TransitionLayer(out_channels, compression = compression, bn_momentum=bn_momentum))
+            self.add_module(f'transition_layer_{i}', TransitionLayer(out_channels, compression = compression, bn_args=bn_args))
             out_channels = out_channels // 2
         i = len(repeats)-1
         self.add_module(f'dense_block_{i}', DenseBlock(out_channels, repeats = repeats[i],
-             growth_rate = growth_rate, expansion=expansion, bn_momentum = bn_momentum))
+             growth_rate = growth_rate, expansion=expansion, bn_args = bn_args))
         # Parameter initialization
         init.kaiming_uniform_(self.conv_init.weight, mode='fan_in', nonlinearity='relu')
         init.zeros_(self.conv_init.bias)
@@ -104,21 +104,21 @@ class DenseNet(nn.Module):
         return x
 
 class DenseNet121(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_momentum = .01):
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__(in_channels, [6,12,24,16], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_momentum = bn_momentum)
+            expansion = expansion, compression = compression, bn_args = bn_args)
 
 class DenseNet169(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_momentum = .01):
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__(in_channels, [6,12,32,32], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_momentum = bn_momentum)
+            expansion = expansion, compression = compression, bn_args = bn_args)
 
 class DenseNet201(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_momentum = .01):
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__(in_channels, [6,12,48,32], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_momentum = bn_momentum)
+            expansion = expansion, compression = compression, bn_args = bn_args)
 
 class DenseNet264(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_momentum = .01):
+    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__(in_channels, [6,12,64,48], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_momentum = bn_momentum)
+            expansion = expansion, compression = compression, bn_args = bn_args)
