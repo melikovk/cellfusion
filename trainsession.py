@@ -179,7 +179,7 @@ class TrainSession:
         return (loss, outputs)
 
     @torch.no_grad()
-    def evaluate(self, data):
+    def evaluate(self, data, update_saver = True):
         self.model.eval()
         loss = defaultdict(return_zero)
         size = 0
@@ -200,6 +200,8 @@ class TrainSession:
             loss[k] = loss[k]/size
         for k, v in accuracy.items():
             accuracy[k] = accuracy[k]/size
+        if self.saver and update_saver:
+            self.saver.save(self, self.epoch, {**loss, **accuracy})
         return (loss, accuracy)
 
     def train(self, train_data, valid_data, epochs = None):
@@ -253,8 +255,6 @@ class TrainSession:
                     metrics[k+'/validation'] = v
                 for metric, value in metrics.items():
                     writer.add_scalar(metric, value, self.epoch)
-            if self.saver:
-                self.saver.save(self, self.epoch, {'loss':valid_loss['loss'], 'accuracy':valid_acc})
             pbar.close()
 
     def update_lr(self, factor):
