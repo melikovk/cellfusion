@@ -50,7 +50,8 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     else:
         raise ValueError('dataset_type should be either SSD or YOLO')
     test_dataset_parameters = train_dataset_parameters.copy()
-    test_dataset_parameters['length'] = 100
+    test_dataset_parameters['win_size'] = (800, 800)
+    test_dataset_parameters['length'] = 10
 
     if dataset_type == 'SSD':
         dataset_class = SSDDataset
@@ -77,7 +78,7 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     'num_workers': 2 }
 
     test_dataloader_parameters = {
-    'batch_size': 32,
+    'batch_size': 2,
     'shuffle': True,
     'num_workers': 2 }
 
