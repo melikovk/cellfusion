@@ -24,7 +24,7 @@ class ObjectDetectionLoss:
         {'loss': total_loss, 'confidence_loss':confidence_loss, 'localization_loss':localization_loss}
     """
     def __init__(self, reduction='mean', confidence_loss = 'crossentropy', size_transform = 'none',
-        localization_weight = 1, normalize_per_anchor = True, **kwargs):
+        localization_weight = 1, normalize_per_anchor = True, normalize_per_cell = True, **kwargs):
         assert reduction == 'mean' or reduction == 'sum', \
             "reduction should be 'mean' or 'sum'"
         assert confidence_loss in ['crossentropy', 'mse', 'focal_loss', 'focal_loss*'], \
@@ -36,6 +36,7 @@ class ObjectDetectionLoss:
         self.size_transform = size_transform
         self.localization_weight = localization_weight
         self.normalize_per_anchor = normalize_per_anchor
+        self.normalize_per_cell = normalize_per_cell
         self.kwargs = kwargs
 
     def __call__(self, predict, target):
@@ -68,6 +69,9 @@ class ObjectDetectionLoss:
             loss_conf, loss_box = loss_conf/target.shape[0], loss_box/target.shape[0]
         if self.normalize_per_anchor:
             loss_conf = loss_conf/target.shape[2]
+        if self.normalize_per_cell:
+            loss_conf = loss_conf/(target.shape[-1]*target.shape[-2])
+            loss_box = loss_box/(target.shape[-1]*target.shape[-2])
         loss = loss_conf + self.localization_weight*loss_box
         return {'loss':loss, 'confidence_loss': loss_conf, 'localization_loss':self.localization_weight*loss_box}
 
@@ -76,7 +80,8 @@ class ObjectDetectionLoss:
             'confidence_loss': self.confidence_loss,
             'size_transform':self.size_transform,
             'localization_weight':self.localization_weight,
-            'normalize_per_anchor':self.normalize_per_anchor}
+            'normalize_per_anchor':self.normalize_per_anchor,
+            'normalize_per_cell':self.normalize_per_cell}
         return state
 
     def load_state_dict(self, state):
