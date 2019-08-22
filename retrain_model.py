@@ -109,7 +109,7 @@ def train_model(datadir, modelfile, dataset_type, device, num_cycles, cycle_leng
     scheduler_parameters = {
     'T_max': cycle_length }
 
-    logdir = os.path.join('runs', os.path.split(modeldir)[1])
+    logdir = state['log_dir']
 
     session = TrainSession(model,
                            lossfunc,

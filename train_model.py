@@ -32,14 +32,14 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
 
     point_transforms = [RandomGamma(), RandomContrast()]
 
-    geom_transforms = [RandomFlip(), RandomZoom()]
+    geom_transforms = [RandomFlip(), RandomZoom(min_zoom=2/3, max_zoom=1.5)]
 
     norm_transform = AutoContrast()
 
     train_dataset_parameters = {
     'win_size': (224, 224),
     'border_size': 32,
-    'window_overlap_threshold': .9,
+    'window_overlap_threshold': .7,
     'grid_size': model.features.grid_size,
     'length': 500}
     if dataset_type == 'SSD':
@@ -99,7 +99,7 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
 
     accuracy = PrecisionRecallF1MeanIOU(**accuracy_parameters)
 
-    saver = SessionSaver(modeldir)
+    saver = SessionSaver(modeldir, metric='F1@IOU 0.5', ascending=True)
 
     optimizer = optim.Adam
 
@@ -111,7 +111,8 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     scheduler_parameters = {
     'T_max': cycle_length }
 
-    logdir = os.path.join('runs', os.path.split(modeldir)[1])
+    model_folder, model_fname = os.path.split(modeldir)
+    logdir = os.path.join(os.path.join(os.path.split(model_folder)[0],'runs'), model_fname)
 
     session = TrainSession(model,
                            lossfunc,

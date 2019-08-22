@@ -86,9 +86,7 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
     scheduler = optim.lr_scheduler.CosineAnnealingLR
     scheduler_parameters = {
     'T_max': cycle_length }
-
-    logdir = os.path.join('runs', os.path.split(modelfile)[1])
-
+    
     # Finish last unfinished training cycle
     session.train(trainDataLoader, testDataLoader)
     # Initialize and assign new scheduler
