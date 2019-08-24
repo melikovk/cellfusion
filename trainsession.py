@@ -13,6 +13,9 @@ from skimage.transform import rescale
 from importlib import import_module
 from PIL import Image
 import math
+# # Apex
+# from apex import amp
+
 
 autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
 
@@ -161,6 +164,9 @@ class TrainSession:
         self.model = model.to(self.device)
         self.lossfunc = lossfunc
         self.optimizer = optimizer(parameters) if opt_defaults is None else optimizer(parameters, **opt_defaults)
+        # # Apex
+        # self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O2")
+        # # Apex end
         self.scheduler =  None if scheduler is None else scheduler(self.optimizer, **scheduler_params)
         self.scheduler_params = scheduler_params
         self.acc_func = acc_func
@@ -175,6 +181,9 @@ class TrainSession:
         outputs = self.model(inputs)
         loss = self.lossfunc(outputs, labels)
         loss['loss'].backward()
+        # Apex
+        # with amp.scale_loss(loss['loss'], self.optimizer) as scaled_loss:
+        #     scaled_loss.backward()
         self.optimizer.step()
         return (loss, outputs)
 
@@ -191,7 +200,6 @@ class TrainSession:
             batch_loss = self.lossfunc(outputs, labels)
             for k, v in batch_loss.items():
                 loss[k] += v.item() * inputs.size(0)
-            # accuracy += self.acc_func(outputs, labels).item()
             batch_acc = self.acc_func(self.model.get_prediction(outputs), self.model.get_targets(labels))
             for k, v in batch_acc.items():
                 accuracy[k] += v * inputs.size(0)
@@ -241,7 +249,8 @@ class TrainSession:
                 train_acc[k] = train_acc[k]/size
             valid_loss, valid_acc = self.evaluate(valid_data)
             message = (f'Epoch {epoch+1} of {epochs} took {tqdm.format_interval(pbar.last_print_t-pbar.start_t)}\n'
-                       f'Train Loss: {train_loss["loss"]:.4f}, Validation Loss: {valid_loss["loss"]:.4f}')
+                       f'Train Loss: {train_loss["loss"]:.4f}, Validation Loss: {valid_loss["loss"]:.4f}\n'
+                       f'LR: {self.optimizer.param_groups[0]["lr"]:.6f}')
             tqdm.write(message)
             if self.log_dir:
                 metrics = {}
