@@ -109,7 +109,7 @@ class ObjectDetectionHead(nn.Module):
             "coordinate_transform should be 'hardtanh', 'tanh' or 'sigmoid'"
         super().__init__()
         self.anchors = anchors
-        self.eps = torch.tensor(eps)
+        self.register_buffer('eps', torch.tensor(eps))
         if coordinate_transform == 'tanh':
             self.coord_func = NormTanh()
         elif coordinate_transform == 'sigmoid':
@@ -123,7 +123,7 @@ class ObjectDetectionHead(nn.Module):
     def forward(self, x):
         n = self.anchors
         x = self.conv_block(self.activ0(self.bn0(x)))
-        x = torch.cat([x[:,:n,:,:],self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], self.eps.to(x.device))], dim = 1)
+        x = torch.cat([x[:,:n,:,:],self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], self.eps)], dim = 1)
         return x
 
 class ObjectDetectionHeadSplit(nn.Module):
@@ -151,7 +151,7 @@ class ObjectDetectionHeadSplit(nn.Module):
         assert coordinate_transform in ['hardtanh', 'sigmoid', 'tanh'], \
             "coordinate_transform should be 'hardtanh', 'tanh' or 'sigmoid'"
         super().__init__()
-        self.eps = torch.tensor(eps)
+        self.register_buffer('eps', torch.tensor(eps))
         self.anchors = anchors
         if coordinate_transform == 'tanh':
             self.coord_func = NormTanh()
@@ -172,7 +172,7 @@ class ObjectDetectionHeadSplit(nn.Module):
         x = self.activ0(self.bn0(x))
         x_obj = self.object_subnet(x)
         x_box = self.box_subnet(x)
-        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps.to(x.device))], dim = 1)
+        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps)], dim = 1)
         return x
 
 class ObjectDetectionHeadSplitResBtlneck(nn.Module):
@@ -181,7 +181,7 @@ class ObjectDetectionHeadSplitResBtlneck(nn.Module):
         assert coordinate_transform in ['hardtanh', 'sigmoid', 'tanh'], \
             "coordinate_transform should be 'hardtanh', 'tanh' or 'sigmoid'"
         super().__init__()
-        self.eps = torch.tensor(eps)
+        self.register_buffer('eps', torch.tensor(eps))
         self.anchors = anchors
         if coordinate_transform == 'tanh':
             self.coord_func = NormTanh()
@@ -191,7 +191,6 @@ class ObjectDetectionHeadSplitResBtlneck(nn.Module):
             self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
         self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
         self.activ0 = _activation[activation](**act_args)
-
         self.object_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features, repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
         self.object_out = nn.Conv2d(hidden_features, self.anchors, 1)
         self.box_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features, repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
@@ -205,7 +204,7 @@ class ObjectDetectionHeadSplitResBtlneck(nn.Module):
         x = self.activ0(self.bn0(x))
         x_obj = self.object_out(self.object_subnet(x))
         x_box = self.box_out(self.box_subnet(x))
-        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps.to(x.device))], dim = 1)
+        x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps)], dim = 1)
         return x
 
 
