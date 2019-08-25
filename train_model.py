@@ -14,8 +14,10 @@ from functools import partial
 from image.random_transforms import RandomGamma, RandomContrast, RandomFlip, RandomZoom, AutoContrast
 import argparse
 import os.path
+from optimizers.adamw import AdamW
+from optimizers.radamw import RAdamW
 
-def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_length, lr_multiplier, init_lr):
+def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_length, lr_multiplier, cl_multiplier, init_lr):
     """ Procedure that trains object recognition models
     Parameters:
         datadir: folder with train and test data
@@ -24,9 +26,9 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     anchors = 'anchors1'
     features_params = {'in_channels': 1}
     head_params = {'in_features': 320,
-                   'coordinate_transform':'sigmoid'}
+                   'coordinate_transform':'tanh'}
 
-    model = catalog.MobileNetSplitHead(anchors, features_params, head_params)
+    model = catalog.MobileNetSplitResBtlneckHead(anchors, features_params, head_params)
 
     train_names, test_names = get_filenames(datadir, 'nuclei', 'new_curated_boxes_without_dead/')
 
@@ -86,7 +88,7 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
     testDataLoader = RandomLoader(testDataset, **test_dataloader_parameters)
 
     loss_parameters = {
-    'confidence_loss': 'crossentropy',
+    'confidence_loss': 'focal_loss',
     'size_transform': 'none',
     'localization_weight': 10.0,
     'normalize_per_anchor': True }
@@ -101,11 +103,12 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
 
     saver = SessionSaver(modeldir, metric='F1@IOU 0.5', ascending=True)
 
-    optimizer = optim.Adam
+    optimizer = RAdamW
 
     optimizer_defaults = {
     'lr': init_lr,
-    'weight_decay':1e-5}
+    # 'momentum': 0.9,
+    'weight_decay':1e-2}
 
     scheduler = optim.lr_scheduler.CosineAnnealingLR
     scheduler_parameters = {
@@ -127,6 +130,8 @@ def train_model(datadir, modeldir, dataset_type, device, num_cycles, cycle_lengt
                            device = torch.device(device))
     for i in range(num_cycles):
         session.train(trainDataLoader, testDataLoader, cycle_length)
+        cycle_length = cycle_length * cl_multiplier
+        session.scheduler.T_max = cycle_length
         session.update_lr(lr_multiplier)
 
 if __name__ == "__main__":
@@ -137,6 +142,7 @@ if __name__ == "__main__":
     main_parser.add_argument('--init_lr', type=float, default=.01)
     main_parser.add_argument('--cycle_length', type=int, default = 100)
     main_parser.add_argument('--lr_multiplier', type=float, default=.5)
+    main_parser.add_argument('--cl_multiplier', type=int, default=1)
     main_parser.add_argument('--num_cycles', type=int, default=5)
     main_parser.add_argument('--device', type=int, required=True)
     main_args = main_parser.parse_args()
