@@ -1,6 +1,6 @@
 import math
 import torch
-from .optimizer import Optimizer
+from torch.optim import Optimizer
 
 
 class RAdamW(Optimizer):
@@ -45,10 +45,10 @@ class RAdamW(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay, amsgrad=amsgrad)
-        super(AdamW, self).__init__(params, defaults)
+        super().__init__(params, defaults)
 
     def __setstate__(self, state):
-        super(AdamW, self).__setstate__(state)
+        super().__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)
 
