@@ -9,6 +9,9 @@ import math
 from scipy.special import expit
 import matplotlib.pyplot as plt
 from matplotlib import patches
+import torch.multiprocessing as mp
+import os
+
 
 NUCLEUS = 0
 BKG = 1
@@ -20,8 +23,11 @@ class RandomLoader(DataLoader):
 
     def __iter__(self):
         if isinstance(self.dataset, ConcatDataset):
-            for dset in self.dataset.datasets:
-                dset.reset()
+            # for dset in self.dataset.datasets:
+            #     dset.reset()
+            cpu_num = os.cpu_count()
+            with mp.Pool(cpu_num) as pool:
+                self.dataset.datasets = pool.map(reset_dataset, self.dataset.datasets)
         else:
             self.dataset.reset()
         return super().__iter__()
@@ -57,7 +63,7 @@ class CropDataset(Dataset):
         self._seed = seed
         # Create array ob object boxes
         self._boxes_orig = get_boxes_from_json(lblname)
-        self._img, self._boxes = self._data_augmentation()
+        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
         # self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
         self._xys = self._init_coordinates()
 
@@ -349,3 +355,7 @@ def show_boxes(image, labels, grid_size, cell_anchors, threshold=0.5):
 #     rect = patches.Rectangle((-xmin,-ymin), *img.shape, fill=False, edgecolor='green')
 #     ax.add_patch(rect)
     ax.set(xlim=(xmin-5,xmax+5), ylim=(ymax+5, ymin-5))
+
+def reset_dataset(dset):
+    dset.reset()
+    return dset
