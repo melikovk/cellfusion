@@ -267,6 +267,14 @@ class TrainSession:
             pbar.close()
 
     def update_lr(self, factor):
+        """ Update initial_lr if scheduler is used or optimizer lr if not using
+        scheduler. In both cases lr of all parameter groups is multiplied by the
+        same factor.
+        Arguments:
+            factor (float): factor by which to multiply lr
+        Examples::
+            >>> self.update_lr(0.5)
+        """
         if self.scheduler:
             for group in self.optimizer.param_groups:
                 group['initial_lr'] = group['initial_lr']*factor
@@ -275,6 +283,25 @@ class TrainSession:
         else:
             for group in self.optimizer.param_groups:
                 group['lr'] = group['lr']*factor
+
+    def set_lr(self, lrs):
+        """ Set initial_lrs if scheduler is used or optimizer lr if not using scheduler.
+        Takes single float or list of floats. If list is give its length should match
+        the number of parameter groups.
+        Arguments:
+            lrs (float or [float]): learning rates
+        Examples::
+            >>> self.set_lr(.01)
+            >>> self.set_lr([0.01, 0.02, 0.001])
+        """
+        if not isinstance(lrs, list):
+            lrs = [lrs]*len(self.optimizer.param_groups)
+        if len(lrs) != len(self.optimizer.param_groups):
+            raise ValueError(f"Number of the learning rates ({len(lrs)}) does not match "
+                             f"number of the parameter groups ({len(self.optimizer.param_groups)})")
+        for group, lr in zip(self.optimizer.param_groups, lrs):
+            group['initial_lr'] = lr
+        self.scheduler.base_lrs = lrs
 
     def state_dict(self):
         state = {'epoch': self.epoch,
