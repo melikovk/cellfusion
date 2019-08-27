@@ -212,14 +212,14 @@ class TrainSession:
             self.saver.save(self, self.epoch, {**loss, **accuracy})
         return (loss, accuracy)
 
-    def train(self, train_data, valid_data, epochs = None):
-        if epochs is None:
-             epochs = self.epochs_left
+    def train(self, train_data, valid_data, total_epochs = None, start_epoch=0):
+        if total_epochs is None:
+             total_epochs = start_epoch + self.epochs_left
         if self.log_dir:
             writer = SummaryWriter(self.log_dir, purge_step = self.epoch)
-        for epoch in range(epochs):
+        for epoch in range(start_epoch, total_epochs):
             self.epoch += 1
-            self.epochs_left = epochs-epoch-1
+            self.epochs_left = total_epochs-epoch-1
             self.model.train()
             train_loss = defaultdict(return_zero)
             size = 0

@@ -26,7 +26,7 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
 
     session = TrainSession.restore_from_state_dict(session_state, device)
 
-    train_names, test_names = get_filenames(datadir, 'nuclei', 'new_curated_boxes_without_dead/')
+    train_names, test_names = get_filenames(datadir, 'nuclei', 'boxes/')
 
     point_transforms = [RandomGamma(), RandomContrast()]
 
@@ -86,11 +86,13 @@ def resume_model_training(datadir, modelfile, dataset_type, device, num_cycles, 
     scheduler = optim.lr_scheduler.CosineAnnealingLR
     scheduler_parameters = {
     'T_max': cycle_length }
-    
+
     # Finish last unfinished training cycle
-    session.train(trainDataLoader, testDataLoader)
+    session.train(trainDataLoader, testDataLoader, start_epoch=session.scheduler.last_epoch + 1)
     # Initialize and assign new scheduler
     session.scheduler = scheduler(session.optimizer, **scheduler_parameters)
+    # Reset learning rates
+    session.set_lr(init_lr)
     # Start new training cycles
     for i in range(num_cycles):
         session.train(trainDataLoader, testDataLoader, cycle_length)
