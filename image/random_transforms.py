@@ -35,6 +35,18 @@ class RandomContrast:
             out = (img - out*self.deblur_k)/(1-self.deblur_k)
         return out
 
+class RandomSharpen:
+    def __init__(self, blur_max_sigma = 4, deblur_max_sigma = 4, deblur_k=.6, seed=None):
+        self.deblur_max_sigma = deblur_max_sigma
+        self.deblur_k = deblur_k
+        self.gen = np.random.RandomState(seed)
+
+    def __call__(self, img):
+        sigma = self.gen.uniform(low=0, high=self.deblur_max_sigma)
+        out = cv2.GaussianBlur(img, (0,0), sigma)
+        out = (img - out*self.deblur_k)/(1-self.deblur_k)
+        return out
+
 class RandomBlur:
     def __init__(self, blur_max_sigma = 4, seed=None):
         self.blur_max_sigma = blur_max_sigma
