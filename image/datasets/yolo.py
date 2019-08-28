@@ -23,11 +23,11 @@ class RandomLoader(DataLoader):
 
     def __iter__(self):
         if isinstance(self.dataset, ConcatDataset):
-            # for dset in self.dataset.datasets:
-            #     dset.reset()
-            cpu_num = os.cpu_count()
-            with mp.Pool(cpu_num) as pool:
-                self.dataset.datasets = pool.map(reset_dataset, self.dataset.datasets)
+            for dset in self.dataset.datasets:
+                dset.reset()
+            # cpu_num = os.cpu_count()
+            # with mp.Pool(cpu_num) as pool:
+            #     self.dataset.datasets = pool.map(reset_dataset, self.dataset.datasets)
         else:
             self.dataset.reset()
         return super().__iter__()
@@ -356,6 +356,6 @@ def show_boxes(image, labels, grid_size, cell_anchors, threshold=0.5):
 #     ax.add_patch(rect)
     ax.set(xlim=(xmin-5,xmax+5), ylim=(ymax+5, ymin-5))
 
-def reset_dataset(dset):
-    dset.reset()
-    return dset
+# def reset_dataset(dset):
+#     dset.reset()
+#     return dset
