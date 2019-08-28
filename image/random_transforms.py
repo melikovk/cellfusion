@@ -11,7 +11,7 @@ class RandomGamma:
 
     def __call__(self, img, boxes=None):
         gamma = self.gen.uniform(low=self.min_gamma, high=self.max_gamma)
-        out = cv2.pow(img, gamma)
+        out = cv2.pow(img-img.min(), gamma)
         return  out if boxes is None else (out, boxes)
 
 class RandomContrast:
@@ -91,11 +91,12 @@ class RandomFlip:
         return out_img if boxes is None else (out_img, out_boxes)
 
 class RandomZoom:
-    def __init__(self, min_zoom = .5, max_zoom = 2, keep_aspect = True, seed = None):
+    def __init__(self, min_zoom = .5, max_zoom = 2, keep_aspect = True, seed = None, interpolation = cv2.INTER_CUBIC):
         self.min_zoom = min_zoom
         self.max_zoom = max_zoom
         self.keep_aspect = keep_aspect
         self.gen = np.random.RandomState(seed)
+        self.interpolation = interpolation
 
     def __call__(self, img, boxes = None):
         if self.keep_aspect:
@@ -103,7 +104,7 @@ class RandomZoom:
         else:
             fx = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
             fy = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
-        out_img = cv2.resize(img, dsize=(0,0), fx=fx, fy=fy, interpolation=cv2.INTER_CUBIC)
+        out_img = cv2.resize(img, dsize=(0,0), fx=fx, fy=fy, interpolation=self.interpolation)
         fx = out_img.shape[-2]/img.shape[-2]
         fy = out_img.shape[-1]/img.shape[-1]
         if boxes is not None:

@@ -1,5 +1,4 @@
 import cv2
-from skimage.exposure import adjust_gamma
 import numpy as np
 
 
@@ -16,7 +15,7 @@ class Zoom:
         out_img = cv2.resize(img, dsize=(0,0), fx=self.fx, fy=self.fy, interpolation=self.interpolation)
         fx = out_img.shape[-2]/img.shape[-2]
         fy = out_img.shape[-1]/img.shape[-1]
-        if boxes:
+        if boxes is not None:
             out_boxes = boxes*np.array([fx,fy]*2)
             return out_img, out_boxes
         else:
@@ -27,18 +26,26 @@ class Sharpen:
         self.deblur_sigma = deblur_sigma
         self.deblur_k = deblur_k
 
-    def __call__(self, img):
+    def __call__(self, img, boxes = None):
         out = cv2.GaussianBlur(img, (0,0), self.deblur_sigma)
         out = (img - out*self.deblur_k)/(1-self.deblur_k)
-        return out
+        return out if boxes is None else (out, boxes)
 
 class GaussianBlur:
     def __init__(self, sigma=1):
         self.sigma = sigma
 
-    def __call__(self, img):
+    def __call__(self, img, boxes = None):
         out = cv2.GaussianBlur(img, (0,0), self.sigma)
-        return out
+        return out if boxes is None else (out, boxes)
+
+class Gamma:
+    def __init__(self, gamma):
+        self.gamma = gamma
+
+    def __call__(self, img, boxes = None):
+        out = cv2.pow(img-img.min(), self.gamma)
+        return out if boxes is None else (out, boxes)
 
 def Typecast(newtype):
     return lambda x: x.astype(newtype)
@@ -46,12 +53,6 @@ def Typecast(newtype):
 def ToRGB():
     return lambda x: np.stack([x]*3, axis=-1)
 
-def RandomHflip(prob=.5):
-    return lambda x: x if np.random.random(1) > prob else cv2.flip(x, 1)
-
-# def RandomVflip(prob=.5):
-#     return lambda x: x if np.random.random(1) > prob else cv2.flip(x, 0)
-#
 # def RandomRotation(angle_range, autocrop=True):
 #     if isinstance(angle_range, int):
 #         angle_range = (-np.abs(angle_range), np.abs(angle_range))
@@ -73,9 +74,3 @@ def RandomHflip(prob=.5):
 #             mat = cv2.getRotationMatrix2D((img.shape[0]/2, img.shape[1]/2),alpha, 1)
 #             return cv2.warpAffine(img, mat, img.shape[:2])
 #     return func
-
-def Gamma(gamma):
-    return lambda x: adjust_gamma(x, gamma)
-
-# def AutoContrast():
-#     return lambda x: (x -x.mean(axis=(0,1))) / x.std(axis=(0,1))
