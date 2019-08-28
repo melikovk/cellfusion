@@ -248,7 +248,7 @@ class TrainSession:
             for k, v in train_acc.items():
                 train_acc[k] = train_acc[k]/size
             valid_loss, valid_acc = self.evaluate(valid_data)
-            message = (f'Epoch {epoch+1} of {epochs} took {tqdm.format_interval(pbar.last_print_t-pbar.start_t)}\n'
+            message = (f'Epoch {epoch+1} of {total_epochs} took {tqdm.format_interval(pbar.last_print_t-pbar.start_t)}\n'
                        f'Train Loss: {train_loss["loss"]:.4f}, Validation Loss: {valid_loss["loss"]:.4f}\n'
                        f'LR: {self.optimizer.param_groups[0]["lr"]:.6f}')
             tqdm.write(message)
