@@ -63,7 +63,7 @@ class AutoContrast:
         self.background = background
         self.max_percentile = max_percentile
 
-    def __call__(self, img, boxes):
+    def __call__(self, img, boxes=None):
         if self.background == 'median':
             bkg = np.median(img, axis=(-2,-1))
         else:
@@ -83,11 +83,11 @@ class RandomFlip:
         if choice == 0:
             out_img = cv2.flip(out_img, flipCode=0)
             if boxes is not None:
-                out_boxes[:,0] = out_img.shape[-2]-1-out_boxes[:,0]-out_boxes[:,2]
+                out_boxes[:,0] = out_img.shape[-2]-1-boxes[:,0]-boxes[:,2]
         elif choice == 1:
             out_img = cv2.flip(out_img, flipCode=1)
             if boxes is not None:
-                out_boxes[:,1] = out_img.shape[-1]-1-out_boxes[:,1]-out_boxes[:,3]
+                out_boxes[:,1] = out_img.shape[-1]-1-boxes[:,1]-boxes[:,3]
         return out_img if boxes is None else (out_img, out_boxes)
 
 class RandomZoom:
