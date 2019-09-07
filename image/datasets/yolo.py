@@ -322,7 +322,8 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
     anchors_grid = get_grid_anchors(cell_anchors, w, h).reshape((4,-1))
     # Select booxes
     labels = labels.cpu().numpy().reshape((5, -1))
-    idx = (labels[0] > threshold).nonzero()[0]
+    logit_threshold = math.log(threshold/(1-threshold))
+    idx = (labels[0] > logit_threshold).nonzero()[0]
     scores = labels[0, idx]
     boxes = labels[1:, idx]
     anchors_grid = anchors_grid[:, idx]
