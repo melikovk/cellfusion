@@ -4,20 +4,14 @@ import torch.nn.init as init
 from tqdm.auto import tqdm
 from collections import OrderedDict, defaultdict
 from tensorboardX import SummaryWriter
-import skimage.io as io
 import numpy as np
 from image.datasets.yolo import labels_to_boxes, get_cell_anchors, get_boxes_from_json
 from image.metrics.localization import nms
-from image.cv2transforms import AutoContrast, Gamma
-from skimage.transform import rescale
 from importlib import import_module
 from PIL import Image
 import math
 # # Apex
 # from apex import amp
-
-
-autocontrast = lambda x: AutoContrast()(x).astype(np.float32)
 
 def get_filenames(datadir, channel, boxes = 'boxes/', suffix = ''):
     channel += '/'
@@ -28,57 +22,6 @@ def get_filenames(datadir, channel, boxes = 'boxes/', suffix = ''):
         test_names = [(datadir+channel+name[:-1]+'.tif', datadir+boxes+name[:-1]+'boxes.json')
                         for name in f.readlines()]
     return train_names, test_names
-
-def return_zero():
-    return 0.0
-
-def predict_nuclei(image, model, grid_size = 32, conf_threshold = 0.5, iou_threshold = 0.8, offset= (0,0), transform = autocontrast):
-    if isinstance(image, str):
-        img = io.imread(image).T
-    else:
-        img = image
-    w, h = img.shape
-    w = w // grid_size * grid_size
-    h = h // grid_size * grid_size
-    img = img[:w,:h]
-    model.eval()
-    device = next(model.parameters()).device
-    input = torch.from_numpy(transform(img).reshape((1, -1, w, h))).to(device)
-    labels = model(input).detach().cpu().squeeze()
-    boxes, scores = labels_to_boxes(labels, grid_size = grid_size, cell_anchors = get_cell_anchors([1],[]), offset = offset, threshold = conf_threshold)
-    boxes = torch.tensor(boxes)
-    scores = torch.tensor(scores)
-    idxs = nms(boxes, scores, iou_threshold)
-    return boxes[idxs], scores[idxs]
-
-def predict_nuclei_zoom2x(fpath, model, grid_size = 32, conf_threshold = 0.5, iou_threshold = 0.8, transform = autocontrast):
-    img = io.imread(fpath).T
-    img = rescale(img, 2, order=1)
-    w, h = img.shape
-    cw, ch = w // 2, h // 2
-    offsets = [(0,0), (0, ch), (cw,0), (cw, ch)]
-    boxes = []
-    scores = []
-    for offw, offh in offsets:
-        cropboxes, cropscores = predict_nuclei(img[offw:offw+cw, offh:offh+ch], model, grid_size, conf_threshold, iou_threshold, (offw, offh), transform)
-        boxes.append(cropboxes)
-        scores.append(cropscores)
-    boxes = torch.floor(torch.cat(boxes)/2)
-    scores = torch.cat(scores)
-    idxs = nms(boxes, scores, iou_threshold)
-    return boxes[idxs], scores[idxs]
-
-def predict_yolo(fpath, model, grid_size = 32):
-    img = io.imread(fpath).T
-    w, h = img.shape
-    w = w // grid_size * grid_size
-    h = h // grid_size * grid_size
-    img = img[:w,:h]
-    device = next(model.parameters()).device
-    transform = lambda x: torch.from_numpy(AutoContrast()(Gamma(0.1)(x)).astype(np.float32)).reshape((1,1,w,h)).to(device)
-    input = transform(img)
-    labels = model(input).detach().cpu()
-    return labels
 
 class SessionSaver:
     """ A class for saving pytorch training sesssion
@@ -190,9 +133,9 @@ class TrainSession:
     @torch.no_grad()
     def evaluate(self, data, update_saver = True):
         self.model.eval()
-        loss = defaultdict(return_zero)
+        loss = defaultdict(float)
         size = 0
-        accuracy = defaultdict(return_zero)
+        accuracy = defaultdict(float)
         for inputs, labels in data:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
@@ -221,10 +164,10 @@ class TrainSession:
             self.epoch += 1
             self.epochs_left = total_epochs-epoch-1
             self.model.train()
-            train_loss = defaultdict(return_zero)
+            train_loss = defaultdict(float)
             size = 0
             # train_acc = 0.0
-            train_acc = defaultdict(return_zero)
+            train_acc = defaultdict(float)
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
