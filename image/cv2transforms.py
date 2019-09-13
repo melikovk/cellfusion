@@ -4,7 +4,7 @@ import numpy as np
 
 class Zoom:
     def __init__(self, zoom, interpolation=cv2.INTER_LINEAR):
-        if isinstance(zoom, int):
+        if np.isscalar(zoom):
             self.fx = zoom
             self.fy = zoom
         else:
@@ -12,7 +12,12 @@ class Zoom:
         self.interpolation = interpolation
 
     def __call__(self, img, boxes=None):
-        out_img = cv2.resize(img, dsize=(0,0), fx=self.fx, fy=self.fy, interpolation=self.interpolation)
+        if len(img.shape)==2:
+            img = np.expand_dims(img, 0)
+        out_img = []
+        for c in range(img.shape[0]):
+            out_img.append(cv2.resize(img[c], dsize=(0,0), fx=self.fx, fy=self.fy, interpolation=self.interpolation))
+        out_img = np.squeeze(np.stack(out_img))
         fx = out_img.shape[-2]/img.shape[-2]
         fy = out_img.shape[-1]/img.shape[-1]
         if boxes is not None:
@@ -27,8 +32,13 @@ class Sharpen:
         self.deblur_k = deblur_k
 
     def __call__(self, img, boxes = None):
-        out = cv2.GaussianBlur(img, (0,0), self.deblur_sigma)
-        out = (img - out*self.deblur_k)/(1-self.deblur_k)
+        if len(img.shape)==2:
+            img = np.expand_dims(img, 0)
+        out = np.zeros_like(img)
+        for c in range(img.shape[0]):
+            out[c] = cv2.GaussianBlur(img[c], (0,0), self.deblur_sigma)
+            out[c] = (img[c] - out[c]*self.deblur_k)/(1-self.deblur_k)
+        out = np.squeeze(out)
         return out if boxes is None else (out, boxes)
 
 class GaussianBlur:
@@ -36,7 +46,12 @@ class GaussianBlur:
         self.sigma = sigma
 
     def __call__(self, img, boxes = None):
-        out = cv2.GaussianBlur(img, (0,0), self.sigma)
+        if len(img.shape)==2:
+            img = np.expand_dims(img, 0)
+        out = np.zeros_like(img)
+        for c in range(img.shape[0]):
+            out[c] = cv2.GaussianBlur(img[c], (0,0), self.sigma)
+        out = np.squeeze(out)
         return out if boxes is None else (out, boxes)
 
 class Gamma:
@@ -44,7 +59,12 @@ class Gamma:
         self.gamma = gamma
 
     def __call__(self, img, boxes = None):
-        out = cv2.pow(img-img.min(), self.gamma)
+        if len(img.shape)==2:
+            img = np.expand_dims(img, 0)
+        out = np.zeros_like(img)
+        for c in range(img.shape[0]):
+            out[c] = cv2.pow(img[c]-img[c].min(), self.gamma)
+        out = np.squeeze(out)
         return out if boxes is None else (out, boxes)
 
 def Typecast(newtype):
