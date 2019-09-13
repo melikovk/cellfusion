@@ -36,8 +36,7 @@ class ObjectDetectionModel(nn.Module):
         """ Get prediction form network output
         """
         n = self.cell_anchors.shape[0]
-        logit_threshold = math.log(threshold/(1-threshold))
-        return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = logit_threshold)
+        return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
 
     @torch.no_grad()
     def predict(self, x):
