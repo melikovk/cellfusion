@@ -210,3 +210,32 @@ def read_cell_counter_xml(fname):
             y = int(marker.find('MarkerY').text)
             markers.append([x,y,mtype])
     return markers
+
+def load_markers(fname):
+    """ Load fusion markers created using Cell Counter plugin in ImageJ
+    Marker_Type 1 corresponds to all nuclei
+    Marker_Type 2 corresponds to nuclei in fused cells
+    """
+    tree = ET.parse(fname)
+    markers = []
+    for marker in tree.findall(".//Marker_Type[Type='1']/Marker"):
+        x = int(marker.find('MarkerX').text)
+        y = int(marker.find('MarkerY').text)
+        markers.append((x,y,0))
+    for marker in tree.findall(".//Marker_Type[Type='2']/Marker"):
+        x = int(marker.find('MarkerX').text)
+        y = int(marker.find('MarkerY').text)
+        markers.append((x,y,1))
+    return np.array(markers)
+
+def mark_fused_boxes(markers, boxes):
+    """Given an array of fusion markers and an array of nucleus boxes
+    return fusion labels for the boxes. Fusion markers are expected to be
+    inside nucleus boxes.
+    """
+    fusion = markers[markers[:,2] == 1]
+    fusion_boxes = np.any(np.all(np.stack([boxes[:,0:1] < fusion[:,0:1].T,
+                             boxes[:,0:1] + boxes[:,2:3] > fusion[:,0:1].T,
+                             boxes[:,1:2] < fusion[:,1:2].T,
+                             boxes[:,1:2] + boxes[:,3:4] > fusion[:,1:2].T], axis=-1), axis=-1), axis=-1)
+    return fusion_boxes
