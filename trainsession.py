@@ -10,17 +10,29 @@ from image.metrics.localization import nms
 from importlib import import_module
 from PIL import Image
 import math
+import os.path
+
 # # Apex
 # from apex import amp
 
-def get_filenames(datadir, channel, boxes = 'boxes/', suffix = ''):
-    channel += '/'
+def get_filenames(datadir, channels, boxes = 'boxes/', suffix = ''):
+    """ This function takes name of a directory, list of channel names and name
+    of folder with boxes. It expects to find files train.txt and test.txt in the
+    provided directory. Both files contain file paths. Each file path is a basename
+    and we expect to find images with names:
+    filedir/channels[i]/filename
+    and file with box annotations:
+    filedir//boxes/filename+boxes.json
+    return list of tuples, where each tuple containes
+    list of image files and box file
+    suffix can be specified to use files train+suffix.txt and test+suffix.txt.
+    """
     with open(datadir+'train'+suffix+'.txt') as f:
-        train_names = [(datadir+channel+name[:-1]+'.tif', datadir+boxes+name[:-1]+'boxes.json')
-                        for name in f.readlines()]
+        train_names = [([os.path.join(fdir, channel, fname+'.tif') for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
+                        for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines())]
     with open(datadir+'test'+suffix+'.txt') as f:
-        test_names = [(datadir+channel+name[:-1]+'.tif', datadir+boxes+name[:-1]+'boxes.json')
-                        for name in f.readlines()]
+        test_names = [([os.path.join(fdir, channel, fname+'.tif') for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
+                        for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines())]
     return train_names, test_names
 
 class SessionSaver:

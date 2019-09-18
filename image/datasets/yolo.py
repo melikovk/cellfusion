@@ -49,8 +49,8 @@ def save_boxes_to_json(boxes, scores, fname):
 class CropDataset(Dataset):
     """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
-    def __init__(self, imgname, lblname, win_size=(224,224), border_size=32, grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None, sample='random', length = None, seed=None, stride=None):
-        self._img_orig = np.asarray(Image.open(imgname)).T
+    def __init__(self, imgnames, lblname, win_size=(224,224), border_size=32, grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None, sample='random', length = None, seed=None, stride=None):
+        self._img_orig = np.stack([np.asarray(Image.open(imgname)).T for imgname in imgnames])
         self._w, self._h = win_size
         self._grid_size = grid_size
         self._border_size = border_size
@@ -61,10 +61,9 @@ class CropDataset(Dataset):
         self._length = length
         self._stride = stride
         self._seed = seed
-        # Create array ob object boxes
+        # Create array of object boxes
         self._boxes_orig = get_boxes_from_json(lblname)
         self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
-        # self._xys = self._init_coordinates(sample=sample, length = length, seed=seed, stride=stride)
         self._xys = self._init_coordinates()
 
     def _data_augmentation(self):
@@ -95,7 +94,7 @@ class CropDataset(Dataset):
 
     def _get_crop(self, idx):
         x, y = self._xys[idx]
-        return self._img[x:x+self._w, y:y+self._h]
+        return self._img[...,x:x+self._w, y:y+self._h]
 
     def _get_labels(self, idx):
         raise NotImplementedError
@@ -105,8 +104,6 @@ class CropDataset(Dataset):
 
     def __getitem__(self, idx):
         img = self._get_crop(idx)
-        # if self._transforms is not None:
-        #     img = self._transforms(img)
         if len(img.shape) < 3:
             img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
         else:
@@ -117,8 +114,6 @@ class CropDataset(Dataset):
     def reset(self):
         self._img, self._boxes = self._data_augmentation()
         self._xys = self._init_coordinates()
-        # if self._seed is None:
-        #     self._xys = self._init_coordinates(sample='random', length=self._xys.shape[0], seed=None, stride=None)
 
 
 class NaiveBoxDataset(CropDataset):
