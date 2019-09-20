@@ -65,6 +65,7 @@ class CropDataset(Dataset):
         self._boxes_orig = get_boxes_from_json(lblname)
         self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
         self._xys = self._init_coordinates()
+        # self._needs_reset = False
 
     def _data_augmentation(self):
         img = self._img_orig.astype(np.float32)
@@ -103,6 +104,10 @@ class CropDataset(Dataset):
         return self._xys.shape[0]
 
     def __getitem__(self, idx):
+        # if self._needs_reset:
+        #     self._img, self._boxes = self._data_augmentation()
+        #     self._xys = self._init_coordinates()
+        #     self._needs_reset = False
         img = self._get_crop(idx)
         if len(img.shape) < 3:
             img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
@@ -112,6 +117,7 @@ class CropDataset(Dataset):
         return (img, labels)
 
     def reset(self):
+        # self._needs_reset = True
         self._img, self._boxes = self._data_augmentation()
         self._xys = self._init_coordinates()
 
