@@ -112,10 +112,10 @@ class AutoContrast:
 
     def __call__(self, img, boxes=None):
         if self.background == 'median':
-            bkg = np.median(img, axis=(-2,-1))
+            bkg = np.median(img, axis=(-2,-1), keepdims=True)
         else:
             bkg = np.mean(img, axis=(-2,-1))
-        max_val = np.quantile(img, self.max_percentile, axis = (-2,-1))
+        max_val = np.quantile(img, self.max_percentile, axis = (-2,-1), keepdims=True)
         out = (img - bkg)/max_val
         return out if boxes is None else (out, boxes)
 
@@ -126,22 +126,25 @@ class RandomFlip:
     def __call__(self, img, boxes = None):
         if len(img.shape)==2:
             img = np.expand_dims(img, 0)
-        out_boxes = np.zeros_like(boxes)
         choice = self.gen.randint(3)
         if choice == 0:
             out_img = np.zeros_like(img)
             if boxes is not None:
-                out_boxes[:,0] = img.shape[-2]-1-boxes[:,0]-boxes[:,2]
+                out_boxes = np.copy(boxes)
+                out_boxes[:,0] = img.shape[-2]-1-out_boxes[:,0]-out_boxes[:,2]
             for c in range(img.shape[0]):
                 out_img[c] = cv2.flip(img[c], flipCode=0)
         elif choice == 1:
             out_img = np.zeros_like(img)
             if boxes is not None:
-                out_boxes[:,1] = img.shape[-1]-1-boxes[:,1]-boxes[:,3]
+                out_boxes = np.copy(boxes)
+                out_boxes[:,1] = img.shape[-1]-1-out_boxes[:,1]-out_boxes[:,3]
             for c in range(img.shape[0]):
                 out_img[c] = cv2.flip(img[c], flipCode=1)
         else:
             out_img = np.copy(img)
+            if boxes is not None:
+                out_boxes = np.copy(boxes)
         out_img = np.squeeze(out_img)
         return out_img if boxes is None else (out_img, out_boxes)
 
