@@ -115,7 +115,7 @@ class AutoContrast:
             bkg = np.median(img, axis=(-2,-1), keepdims=True)
         else:
             bkg = np.mean(img, axis=(-2,-1))
-        max_val = np.quantile(img, self.max_percentile, axis = (-2,-1), keepdims=True)
+        max_val = np.quantile(img, self.max_percentile, axis = (-2,-1), keepdims=True).astype(img.dtype)
         out = (img - bkg)/max_val
         return out if boxes is None else (out, boxes)
 
