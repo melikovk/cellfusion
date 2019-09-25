@@ -491,8 +491,13 @@ class PrecisionRecallF1ClassF1MeanIOU:
             # pclsscores = np.random.random((pscores.shape[0], 2))
             pclslbl = np.argmax(pclsscores, axis=1)
             tboxes, tclslbl = target[i]
-            tboxes = tboxes[nms(tboxes, np.ones(tboxes.shape[0]),.95)]
-            pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
+            tidxs = nms(tboxes, np.ones(tboxes.shape[0]),.95)
+            tboxes = tboxes[tidxs]
+            tclslbl = tclslbl[tidxs]
+            pidxs = nms(pboxes, pscores, self.nms_threshold)
+            pboxes = pboxes[pidxs]
+            pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
+            # print(pclslbl.shape, tclslbl.shape, pboxes.shape, tboxes.shape)
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 match_ious, p_idxs, t_idxs = match_boxes_numpy(pboxes, tboxes)
                 ious.append(match_ious)
@@ -505,6 +510,7 @@ class PrecisionRecallF1ClassF1MeanIOU:
                     cls_tp = (pclslbl[p_idxs[match_idxs]] == tclslbl[t_idxs[match_idxs]]).sum()
                     cls_fp = pboxes.shape[0] - cls_tp
                     cls_fn = tboxes.shape[0] - cls_tp
+                    # print(cls_tp, cls_fp, cls_fn)
                     cls_counts[i] = [cls_tp, cls_fp, cls_fn]
             else:
                 ious.append(np.array([]))
