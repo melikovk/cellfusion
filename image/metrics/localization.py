@@ -161,7 +161,7 @@ def tp_fp_fn_img(predict, target, iou_threshold = 0.5, scores = None, score_thre
         match_ious, _, _ = match_boxes_numpy(p, t)
     tp = (match_ious > iou_threshold).sum()
     fp = p.shape[0] - tp
-    fn = recall = t.shape[0] - tp
+    fn = t.shape[0] - tp
     return tp, fp, fn
 
 def precision_recall_jaccard_img(predict, target, iou_threshold = 0.5, scores = None, score_threshold = 0):
@@ -434,22 +434,91 @@ class PrecisionRecallF1MeanIOU:
         else:
             predict, target = [predict], [target]
         counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
-        ious = [[]]
+        ious = []
         for i in range(len(predict)):
             pboxes, pscores = predict[i]
             tboxes = target[i]
             tboxes = tboxes[nms(tboxes, np.ones(tboxes.shape[0]),.95)]
             pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
-                ious.append(match_boxes_numpy(pboxes, tboxes)[0])
-            for i, thresh in enumerate(self.iou_thresholds):
-                counts[i] += tp_fp_fn_img(pboxes, tboxes, iou_threshold=thresh)
+                match_ious, p_idxs, t_idxs = match_boxes_numpy(pboxes, tboxes)
+                ious.append(match_ious)
+                for i, thresh in enumerate(self.iou_thresholds):
+                    tp = (match_ious > thresh).sum()
+                    fp = pboxes.shape[0] - tp
+                    fn = tboxes.shape[0] - tp
+                    counts[i] += [tp, fp, fn]
+            else:
+                ious.append(np.array([]))
+                for i, thresh in enumerate(self.iou_thresholds):
+                    counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
         results = {}
         for i, thresh in enumerate(self.iou_thresholds):
             tp, fp, fn = counts[i]
             results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
             results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
             results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
+        ious = np.concatenate(ious)
+        results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
+        return results
+
+    def state_dict(self):
+        state = {'iou_thresholds': self.iou_thresholds,
+        'nms_threshold': self.nms_threshold}
+        return state
+
+    def load_state_dict(self, state):
+        self.iou_thresholds = state['iou_thresholds']
+        self.nms_threshold = state['nms_threshold']
+
+class PrecisionRecallF1ClassF1MeanIOU:
+    def __init__(self, iou_thresholds=[0.5,0.8,.95], nms_threshold = 0.8):
+        self.iou_thresholds = iou_thresholds
+        self.nms_threshold = nms_threshold
+
+    def __call__(self, predict, target):
+        if isinstance(predict, list):
+            assert isinstance(target, list) and len(predict) == len(target), \
+                "If predict and target are lists they should have same length"
+        else:
+            predict, target = [predict], [target]
+        counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
+        cls_counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
+        ious = []
+        for i in range(len(predict)):
+            pboxes, pscores, pclsscores = predict[i]
+            # pboxes, pscores = predict[i]
+            # pclsscores = np.random.random((pscores.shape[0], 2))
+            pclslbl = np.argmax(pclsscores, axis=1)
+            tboxes, tclslbl = target[i]
+            tboxes = tboxes[nms(tboxes, np.ones(tboxes.shape[0]),.95)]
+            pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
+            if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
+                match_ious, p_idxs, t_idxs = match_boxes_numpy(pboxes, tboxes)
+                ious.append(match_ious)
+                for i, thresh in enumerate(self.iou_thresholds):
+                    match_idxs = match_ious > thresh
+                    tp = match_idxs.sum()
+                    fp = pboxes.shape[0] - tp
+                    fn = tboxes.shape[0] - tp
+                    counts[i] += [tp, fp, fn]
+                    cls_tp = (pclslbl[p_idxs[match_idxs]] == tclslbl[t_idxs[match_idxs]]).sum()
+                    cls_fp = pboxes.shape[0] - cls_tp
+                    cls_fn = tboxes.shape[0] - cls_tp
+                    cls_counts[i] = [cls_tp, cls_fp, cls_fn]
+            else:
+                ious.append(np.array([]))
+                for i, thresh in enumerate(self.iou_thresholds):
+                    counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
+                    cls_counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
+        results = {}
+        for i, thresh in enumerate(self.iou_thresholds):
+            tp, fp, fn = counts[i]
+            results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
+            results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
+            results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
+            cls_tp, cls_fp, cls_fn = cls_counts[i]
+            results[f"ClassF1@IOU {thresh:{0}.{2}}"] = 2*cls_tp/(2*cls_tp+cls_fp+cls_fn) if 2*cls_tp+cls_fp+cls_fn !=0 else 0
         ious = np.concatenate(ious)
         results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
         return results

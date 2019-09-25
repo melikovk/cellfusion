@@ -238,4 +238,4 @@ def mark_fused_boxes(markers, boxes):
                              boxes[:,0:1] + boxes[:,2:3] > fusion[:,0:1].T,
                              boxes[:,1:2] < fusion[:,1:2].T,
                              boxes[:,1:2] + boxes[:,3:4] > fusion[:,1:2].T], axis=-1), axis=-1), axis=-1)
-    return fusion_boxes
+    return fusion_boxes.astype(int)

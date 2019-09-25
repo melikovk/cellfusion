@@ -11,6 +11,8 @@ from importlib import import_module
 from PIL import Image
 import math
 import os.path
+import cv2
+import matplotlib.pyplot as plt
 
 # # Apex
 # from apex import amp
@@ -150,7 +152,10 @@ class TrainSession:
         accuracy = defaultdict(float)
         for inputs, labels in data:
             inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
+            if isinstance(labels, list):
+                labels = [label.to(self.device) for label in labels]
+            else:
+                labels = labels.to(self.device)
             outputs = self.model(inputs)
             batch_loss = self.lossfunc(outputs, labels)
             for k, v in batch_loss.items():
@@ -185,7 +190,10 @@ class TrainSession:
             pbar = tqdm(total = len(train_data), leave = False)
             for inputs, labels in train_data:
                 inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
+                if isinstance(labels, list):
+                    labels = [label.to(self.device) for label in labels]
+                else:
+                    labels = labels.to(self.device)
                 batch_loss, outputs = self.train_step(inputs, labels)
                 # statistics
                 for k, v in batch_loss.items():
@@ -319,26 +327,22 @@ def _map_param_ids_to_names(opt_state, model):
         g['params'] = [reverse_dict[i] for i in g['params']]
     return new_state
 
-def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale = None):
+def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale = 1):
     """ Given model and name of image file predict boxes
     """
     model.eval()
-    img  = Image.open(imgname)
-    w, h = img.size
-    if upscale is not None:
-        w = int(w*upscale)
-        h = int(h*upscale)
-        img = img.resize((w,h), resample = Image.NEAREST)
-    w1 = (w//model.grid_size)*model.grid_size
-    h1 = (h//model.grid_size)*model.grid_size
+    img  = np.stack([np.asarray(Image.open(imgname)).T.astype(np.float32) for imgname in imgnames])
+    w, h = img.shape[-2:]
+    w1 = (int(w*upscale)//model.grid_size)*model.grid_size
+    h1 = (int(h*upscale)//model.grid_size)*model.grid_size
     wfactor = w / w1
     hfactor = h / h1
-    img = img.resize((w1, h1))
+    img = np.stack([cv2.resize(channel, dsize=(h1,w1), interpolation=cv2.INTER_CUBIC) for channel in img])
     device = next(model.parameters()).device
     if transforms is None:
-        input = torch.from_numpy(np.asarray(img).T.astype(np.float32)).reshape(1, 1, w1, h1).to(device)
+        input = torch.from_numpy(img).reshape(1, 1, w1, h1).to(device)
     else:
-        input = torch.from_numpy(transforms(np.asarray(img).T).astype(np.float32)).reshape(1, 1, w1, h1).to(device)
+        input = torch.from_numpy(transforms(img)).reshape(1, 1, w1, h1).to(device)
     boxes, scores = model.predict(input)[0]
     if nms_threshold is not None:
         keep_idx = nms(boxes, scores, nms_threshold)
@@ -349,13 +353,13 @@ def predict_boxes(model, imgname, transforms=None, nms_threshold=None, upscale =
         boxes = boxes / upscale
     return boxes, scores
 
-def evaluate_model(model, fnames, eval_func, **kwargs):
+def evaluate_model(model, fnames, eval_func, clsname=None, **kwargs):
     """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
     predictions = []
     targets = []
-    for imgname, boxname in fnames:
-        p = predict_boxes(model, imgname, **kwargs)
+    for imgnames, boxname in fnames:
+        p = predict_boxes(model, imgnames, **kwargs)
         predictions.append(p)
-        t = get_boxes_from_json(boxname, 1)
+        t = get_boxes_from_json(boxname, clsname)
         targets.append(t)
     return eval_func(predictions, targets)

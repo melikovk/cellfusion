@@ -35,8 +35,12 @@ class ObjectDetectionModel(nn.Module):
     def get_prediction(self, x, threshold = 0.5):
         """ Get prediction form network output
         """
-        n = self.cell_anchors.shape[0]
-        return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
+        if isinstance(x, list):
+            return labels_to_boxes(x[0], grid_size = self.grid_size, clslbls=x[1],
+                cell_anchors = self.cell_anchors, threshold = threshold)
+        else:
+            return labels_to_boxes(x, grid_size = self.grid_size,
+                cell_anchors = self.cell_anchors, threshold = threshold)
 
     @torch.no_grad()
     def predict(self, x):
@@ -47,7 +51,14 @@ class ObjectDetectionModel(nn.Module):
     def get_targets(self, x):
         """ Get targets from labels Tensor
         """
-        return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
+        if isinstance(x, list):
+            return [(box, clslbl) for box, score, clslbl in labels_to_boxes(x[0],
+                grid_size = self.grid_size, clslbls = x[1],
+                cell_anchors = self.cell_anchors)]
+        else:
+            return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size,
+                cell_anchors = self.cell_anchors)]
+
 
 
 def saveboxes(fpath, boxes, scores):

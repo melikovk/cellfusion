@@ -6,7 +6,7 @@ from ..utils import centerinside
 from ..metrics.localization import iou
 import torch
 import math
-from scipy.special import expit
+from scipy.special import expit, softmax
 import matplotlib.pyplot as plt
 from matplotlib import patches
 import torch.multiprocessing as mp
@@ -32,24 +32,43 @@ class RandomLoader(DataLoader):
             self.dataset.reset()
         return super().__iter__()
 
-def get_boxes_from_json(fname, type = None):
+def get_boxes_from_json(fname, clsname = None):
     with open(fname, 'r') as f:
         boxes = json.load(f)
-    if type is not None:
-        return np.array([box['bounds'] for box in boxes if box['type'] == type])
-    else:
+    if clsname is None:
         return np.array([box['bounds'] for box in boxes])
+    else:
+        return tuple(map(np.array, zip(*[(box['bounds'], box[clsname]) for box in boxes])))
 
-def save_boxes_to_json(boxes, scores, fname):
-    probs = expit(scores).astype(float)
-    records = [{'type':0, 'p':probs[idx], 'bounds':boxes[idx].round().astype(int).tolist()} for idx in range(probs.shape[0])]
+def save_boxes_to_json(boxes, fname, scores=None, clsname=None, clslbl=None, clsscores=None):
+    if scores is not None:
+        probs = expit(scores).astype(float)
+    if clsscores is not None:
+        clsprobs = softmax(clsscores, axis=1)
+    records = [{'bounds': box.round().astype(int).tolist()} for box in boxes]
+    if scores is not None:
+        for idx in range(len(records)):
+            records[idx]['p'] = probs[idx]
+    if clsname is not None:
+        if clslbl is not None:
+            for idx in range(len(records)):
+                records[idx][clsname] = int(clslbl[idx])
+        if clsscores is not None:
+            for idx in range(len(records)):
+                records[idx]['p_'+clsname] = clsscores[idx].tolist()
+        if clslbl is None and clsscores is None:
+            raise ValueError("If class name is provided at least one of the class "
+                              "labels or class scores should be provided")
     with open(fname, 'w') as f:
         json.dump(records, f)
 
 class CropDataset(Dataset):
     """ Base Dataset Class for all object detection datasets that crop subimages from larger image
     """
-    def __init__(self, imgnames, lblname, win_size=(224,224), border_size=32, grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None, sample='random', length = None, seed=None, stride=None):
+    def __init__(self, imgnames, lblname, clsname = None, win_size=(224,224), border_size=32,
+        grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None,
+        sample='random', length = None, seed=None, stride=None):
+        self._fname = lblname
         self._img_orig = np.stack([np.asarray(Image.open(imgname)).T for imgname in imgnames])
         self._w, self._h = win_size
         self._grid_size = grid_size
@@ -62,8 +81,12 @@ class CropDataset(Dataset):
         self._stride = stride
         self._seed = seed
         # Create array of object boxes
-        self._boxes_orig = get_boxes_from_json(lblname)
-        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
+        if clsname is None:
+            self._boxes_orig = get_boxes_from_json(lblname)
+            self._boxcls = None
+        else:
+            self._boxes_orig, self._boxcls = get_boxes_from_json(lblname, clsname)
+        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)/self._grid_size
         self._xys = self._init_coordinates()
         # self._needs_reset = False
 
@@ -113,8 +136,18 @@ class CropDataset(Dataset):
             img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
         else:
             img = torch.from_numpy(img.astype(np.float32))
-        labels = torch.from_numpy(self._get_labels(idx).astype(np.float32))
-        return (img, labels)
+        if self._boxcls is None:
+            labels = torch.from_numpy(self._get_labels(idx).astype(np.float32))
+        else:
+            lbls  = self._get_labels(idx)
+            try:
+                labels, clslbls = lbls
+            except ValueError:
+                print(lbls.shape, idx, self._fname)
+                raise
+            labels = torch.from_numpy(labels.astype(np.float32))
+            clslbls = torch.from_numpy(clslbls)
+        return (img, labels) if self._boxcls is None else (img, [labels, clslbls])
 
     def reset(self):
         # self._needs_reset = True
@@ -142,21 +175,28 @@ class NaiveBoxDataset(CropDataset):
     """
     def _get_labels(self, idx):
         x, y = self._xys[idx]/self._grid_size
-        labels = np.zeros((5, self._w//self._grid_size, self._h//self._grid_size))
-        boxes = self._get_boxes(idx)
-        for box in boxes:
+        boxes, boxcls = self._get_boxes(idx)
+        w, h = self._w//self._grid_size, self._h//self._grid_size
+        labels = np.zeros((5, w, h))
+        if boxcls is not None:
+            clslbls = np.full((w, h), -1, dtype = np.long)
+        for bidx, box in enumerate(boxes):
             xbox, ybox, wbox, hbox = box
             xbox, ybox = xbox + wbox/2, ybox + hbox/2
             xidx, yidx = int(np.floor(xbox)), int(np.floor(ybox))
             xpos, ypos = xbox - xidx, ybox - yidx
             labels[:, xidx, yidx] = [1, xpos, ypos, wbox, hbox]
-        return labels
+            if boxcls is not None:
+                clslbls[xidx, yidx] = boxcls[bidx]
+        return labels if boxcls is None else [labels, clslbls]
 
     def _get_boxes(self, idx):
         x, y = self._xys[idx]/self._grid_size
-        boxes = self._boxes[centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes)].reshape(-1,4)
+        box_idxs = centerinside((x, y, self._w/self._grid_size, self._h/self._grid_size), self._boxes)
+        boxes = self._boxes[box_idxs].reshape(-1,4)
         boxes[:,0:2] = boxes[:,0:2] - [x, y]
-        return boxes
+        boxcls = None if self._boxcls is None else self._boxcls[box_idxs]
+        return boxes, boxcls
 
 class MultiAnchorDataset(CropDataset):
     def __init__(self, imgname, lblname, cell_anchors, window_overlap_threshold = .25, **kwargs):
@@ -168,9 +208,11 @@ class MultiAnchorDataset(CropDataset):
     def _get_boxes(self, idx):
         left_x, top_y = self._xys[idx]/self._grid_size
         w, h = self._w//self._grid_size, self._h//self._grid_size
-        boxes = self._boxes[iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._window_thresh]
+        box_idxs = iou(self._boxes, np.array([left_x, top_y, w, h]), denominator='first').squeeze()>self._window_thresh
+        boxes = self._boxes[box_idxs]
         boxes[:,0:2] = boxes[:,0:2] - [left_x, top_y]
-        return boxes
+        boxcls = None if self._boxcls is None else self._boxcls[box_idxs]
+        return boxes, boxcls
 
 class YoloDataset(MultiAnchorDataset):
     """ Concrete multianchor dataset that uses Yolo like box assignement. We assign
@@ -191,7 +233,7 @@ class YoloDataset(MultiAnchorDataset):
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
         # Filter out boxes that overlap less than threshold with the window
-        boxes = self._get_boxes(idx)
+        boxes, boxcls = self._get_boxes(idx)
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         ignore_mask = (iou_matrix > self._ignore_thresh).any(axis=-1)
         labels[ignore_mask] = -1.0
@@ -199,13 +241,22 @@ class YoloDataset(MultiAnchorDataset):
         match_ious, match_idxs = iou_matrix.max(axis=0), iou_matrix.argmax(axis=0)
         labels[match_idxs] = 1.0
         # Remaining anchors are background boxes
-        labels = labels.reshape((n_anchors, w, h))
         xs[match_idxs] = (boxes[:,0] + boxes[:,2]/2 - anchors[match_idxs, 0])/anchors[match_idxs, 2]
         ys[match_idxs] = (boxes[:,1] + boxes[:,3]/2 - anchors[match_idxs, 1])/anchors[match_idxs, 3]
         ws[match_idxs] = boxes[:,2]/anchors[match_idxs, 2]
         hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 3]
+        # Set class labels if needed
+        if boxcls is not None:
+            clslbls = np.full_like(labels, -1, dtype=np.long)
+            clslbls[match_idxs] = boxcls[np.arange(match_idxs.shape[0], dtype=np.long)]
+            clslbls = clslbls.reshape((n_anchors, w, h))
+        # Reshape
+        labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
-        return np.concatenate((labels, coordinates))
+        if boxcls is None:
+            return np.concatenate((labels, coordinates))
+        else:
+            return np.concatenate((labels, coordinates)), clslbls
 
 class SSDDataset(MultiAnchorDataset):
     """ Concrete multianchor dataset that uses SSD like box assignement. We assign
@@ -226,10 +277,13 @@ class SSDDataset(MultiAnchorDataset):
         n_anchors = self._anchors.shape[0]
         anchors = self._anchors.reshape(-1,4)
         # Filter out boxes that overlap less than threshold with the window
-        boxes = self._get_boxes(idx)
+        boxes, boxcls = self._get_boxes(idx)
         # If there are no true boxes in the window, return label with all background
         if boxes.shape[0] == 0:
-            return np.zeros((5*n_anchors, w, h))
+            if boxcls is None:
+                return np.zeros((5*n_anchors, w, h))
+            else:
+                return np.zeros((5*n_anchors, w, h)), np.full((n_anchors, w, h), -1, dtype=np.long)
         labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
@@ -247,7 +301,7 @@ class SSDDataset(MultiAnchorDataset):
         # Find true boxes with maximal IOU with unmatched anchors
         match_ious, match_idx = iou_matrix[unmatched_mask].max(axis=-1), iou_matrix[unmatched_mask].argmax(axis=-1)
         # Assign anchors that have IOU with any true box higher than positive_threshold
-        # to the index of the true box with highest IOU
+        # to the index of the true box with highest IOU + 1
         unmatched_labels[match_ious > self._positive_thresh] = match_idx[match_ious > self._positive_thresh] + 1
         labels[unmatched_mask] = unmatched_labels
         # Remaining boxes are ignore boxes - they are not maximal and have intermediate
@@ -259,10 +313,19 @@ class SSDDataset(MultiAnchorDataset):
         ys[match_mask] = (boxes[labels[match_mask]-1,1] + boxes[labels[match_mask]-1,3]/2 - anchors[match_mask, 1])/anchors[match_mask, 3]
         ws[match_mask] = boxes[labels[match_mask]-1,2]/anchors[match_mask, 2]
         hs[match_mask] = boxes[labels[match_mask]-1,3]/anchors[match_mask, 3]
+        # Set class labels if needed
+        if boxcls is not None:
+            clslbls = np.full_like(labels, -1, dtype=np.long)
+            clslbls[match_mask] = boxcls[labels[match_mask]-1]
+            clslbls = clslbls.reshape((n_anchors, w, h))
         labels[labels>0] = 1
         labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
-        return np.concatenate((labels, coordinates))
+        if boxcls is None:
+            return np.concatenate((labels, coordinates))
+        else:
+            return np.concatenate((labels, coordinates)), clslbls
+
 
 def get_cell_anchors(scales, anchors):
     """ Create set of anchors for single cell on the grid
@@ -295,7 +358,7 @@ def get_grid_anchors(cell_anchors, w, h):
     anchors_grid = anchors_grid + cell_anchors.T.reshape((4,-1,1,1))
     return anchors_grid
 
-def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,0)):
+def labels_to_boxes(labels, grid_size, cell_anchors, clslbls=None, threshold = 0.5, offset=(0,0)):
     """ Function to convert object loacalization model output to bounding boxes
     Parameters:
         labels:     [5*n_anchors:width:height] or
@@ -313,7 +376,10 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
         if given batch return list of the predictions for each image
     """
     if len(labels.shape) == 4:
-        return [labels_to_boxes(img, grid_size, cell_anchors, threshold, offset) for img in labels]
+        if clslbls is None:
+            return [labels_to_boxes(img, grid_size, cell_anchors, clslbls, threshold, offset) for img in labels]
+        else:
+            return [labels_to_boxes(img, grid_size, cell_anchors, imgcls, threshold, offset) for img, imgcls in zip(labels, clslbls)]
     if isinstance(offset, int):
         offx = offy = offset
     else:
@@ -334,7 +400,10 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
     boxes = boxes*grid_size
     boxes[0] += offx
     boxes[1] += offy
-    return boxes.T, scores
+    # get class labels or class scores if needed
+    if clslbls is not None:
+        boxcls = clslbls.cpu().numpy().reshape((-1, labels.shape[-1]))[:, idx].T
+    return (boxes.T, scores) if clslbls is None else (boxes.T, scores, boxcls)
 
 def show_boxes(image, labels, grid_size, cell_anchors, threshold=0.5):
     """
