@@ -43,11 +43,12 @@ class ObjectDetectionLoss:
     def __call__(self, predict, target):
         if isinstance(predict, list):
             assert isinstance(target, list) and len(predict) == len(target), \
-                "for class predictions lists of the same size are expected"
+                "for class predictions lists of the same size are expected {} {}".format(predict, target)
             add_class_loss = True
             predict_obj = predict[0]
             target_obj = target[0]
         else:
+            add_class_loss = False
             predict_obj = predict
             target_obj = target
         assert predict_obj.shape == target_obj.shape, \
@@ -79,7 +80,7 @@ class ObjectDetectionLoss:
         if add_class_loss:
             loss_class = F.cross_entropy(predict[1].reshape((target[1].shape[0],-1)+target[1].shape[1:]),target[1],reduction='sum', ignore_index=-1)
         else:
-            loss_class = 0
+            loss_class = torch.tensor(0, dtype=torch.float32, requires_grad=True, device = predict_obj.device)
         # Calculate reductions
         if self.reduction == 'mean':
             loss_conf = loss_conf/target_obj.shape[0]
