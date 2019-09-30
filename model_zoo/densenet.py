@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import numpy as np
 
 """ Densely connected convolutional model mostly similar to the paper
@@ -70,19 +70,20 @@ class DenseBlock(nn.Module):
                  growth_rate = growth_rate, expansion=expansion, bn_args = bn_args))
 
     def forward(self, x):
-        for m in self.children():
+        for m in self._modules.values():
             x = m(x)
         return x
 
 class DenseNet(nn.Module):
-    def __init__(self, in_channels, repeats, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
+    def __init__(self, in_channels, repeats, features_num = 1, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
         super().__init__()
         out_channels = 2*growth_rate
+        self.features_num = features_num
+        self.grid_size = 4 * 2**(len(repeats)-1)
         self.conv_init = nn.Conv2d(in_channels, out_channels, kernel_size = 7, stride = 2, padding = 3)
         self.bn_init = nn.BatchNorm2d(out_channels, **bn_args)
         self.activation_init = nn.ReLU6()
         self.pooling_init = nn.MaxPool2d(3, stride=2, padding = 1)
-        self.grid_size = 4 * 2**(len(repeats)-1)
         for i in range(len(repeats)-1):
             self.add_module(f'dense_block_{i}', DenseBlock(out_channels, repeats = repeats[i],
                  growth_rate = growth_rate, expansion=expansion, bn_args = bn_args))
@@ -99,26 +100,28 @@ class DenseNet(nn.Module):
         init.zeros_(self.bn_init.bias)
 
     def forward(self, x):
-        for m in self.children():
+        feature_maps = deque(maxlen=self.features_num)
+        for m in self._modules.values():
             x = m(x)
-        return x
+            if isinstance(m, DenseBlock):
+                feature_maps.append(x)
+        if self.features_num > 1:
+            return list(reversed(feature_maps))
+        else:
+            return feature_maps.pop()
 
 class DenseNet121(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
-        super().__init__(in_channels, [6,12,24,16], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_args = bn_args)
+    def __init__(self, in_channels, features_num=1, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
+        super().__init__(in_channels, [6,12,24,16], features_num, growth_rate, expansion, compression, bn_args)
 
 class DenseNet169(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
-        super().__init__(in_channels, [6,12,32,32], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_args = bn_args)
+    def __init__(self, in_channels, features_num=1, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
+        super().__init__(in_channels, [6,12,32,32], features_num, growth_rate, expansion, compression, bn_args)
 
 class DenseNet201(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
-        super().__init__(in_channels, [6,12,48,32], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_args = bn_args)
+    def __init__(self, in_channels, features_num=1, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
+        super().__init__(in_channels, [6,12,48,32], features_num ,growth_rate, expansion, compression, bn_args)
 
 class DenseNet264(DenseNet):
-    def __init__(self, in_channels, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
-        super().__init__(in_channels, [6,12,64,48], growth_rate = growth_rate,
-            expansion = expansion, compression = compression, bn_args = bn_args)
+    def __init__(self, in_channels, features_num=1, growth_rate = 32, expansion = 4, compression = 2, bn_args={'momentum':0.01}):
+        super().__init__(in_channels, [6,12,64,48], features_num, growth_rate, expansion, compression, bn_args)
