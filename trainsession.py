@@ -340,9 +340,9 @@ def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale 
     img = np.stack([cv2.resize(channel, dsize=(h1,w1), interpolation=cv2.INTER_CUBIC) for channel in img])
     device = next(model.parameters()).device
     if transforms is None:
-        input = torch.from_numpy(img).reshape(1, 1, w1, h1).to(device)
+        input = torch.from_numpy(img).reshape(1, img.shape[0], w1, h1).to(device)
     else:
-        input = torch.from_numpy(transforms(img)).reshape(1, 1, w1, h1).to(device)
+        input = torch.from_numpy(transforms(img)).reshape(1, img.shape[0], w1, h1).to(device)
     boxes, scores = model.predict(input)[0]
     if nms_threshold is not None:
         keep_idx = nms(boxes, scores, nms_threshold)
