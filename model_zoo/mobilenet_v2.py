@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import numpy as np
 
 class Bottleneck(nn.Module):
@@ -78,7 +78,7 @@ class Block(nn.Module):
 
 class MobileNetV2(nn.Module):
 
-    def __init__(self, in_channels, features_num = [-1], out_channels=(32,16,24,32,64,96,160,320),
+    def __init__(self, in_channels, features_num = 1, out_channels=(32,16,24,32,64,96,160,320),
         repeats=(1,2,3,4,3,3,1), strides=(1,2,2,2,1,2,1), expansions=(1,6,6,6,6,6,6), bn_args={'momentum':0.01}):
 
         super().__init__()
@@ -97,16 +97,18 @@ class MobileNetV2(nn.Module):
         init.zeros_(self.bn_init.bias)
 
     def forward(self,x):
-        feature_maps = []
+        feature_maps = deque(maxlen=self.features_num)
         x = self.activation_init(self.bn_init(self.conv_init(x)))
         feature_maps.append(x)
         for block in self.blocks:
             x = block(x)
-            if block.stride > 1:
-                feature_maps.append(x)
-            else:
-                feature_maps[-1] = x
-        return feature_maps[-self.features_num:][-1::-1]
+            if block.stride == 1:
+                feature_maps.pop()
+            feature_maps.append(x)
+        if self.features_num > 1:
+            return list(reversed(feature_maps))
+        else:
+            return feature_maps.pop()
 
 def convert_parameters(parameters):
     new_params = OrderedDict()
