@@ -14,6 +14,7 @@ import torch
 from torch.utils.data import Dataset
 from .metrics.localization import iou
 import xml.etree.ElementTree as ET
+import tifffile as tif
 
 NUCLEUS = 0
 BKG = 1
@@ -239,3 +240,19 @@ def mark_fused_boxes(markers, boxes):
                              boxes[:,1:2] < fusion[:,1:2].T,
                              boxes[:,1:2] + boxes[:,3:4] > fusion[:,1:2].T], axis=-1), axis=-1), axis=-1)
     return fusion_boxes.astype(int)
+
+CHANNELS_TO_DIRNAMES = {'DAPI1%': 'nuclei', 'DAPI5%': 'nuclei', 'DAPI10%': 'nuclei',
+                        'DAPI20%': 'nuclei','DAPI50%': 'nuclei','DAPI90%': 'nuclei',
+                        'Trans1%': 'phase', 'Trans5%': 'phase', 'Trans10%': 'phase',
+                        'Trans20%': 'phase','Trans50%': 'phase','Trans90%': 'phase'}
+
+def split_imagej_channels(imgpath, filedir, index, channel_to_dirname = CHANNELS_TO_DIRNAMES):
+     with tif.TiffFile(imgpath) as implus:
+        fname = f'image{index:06d}.tif'
+        img = implus.asarray()
+        channels = implus.micromanager_metadata['Summary']['ChNames']
+        pixel_size = implus.micromanager_metadata['Summary']['PixelSize_um']
+        for i, chname in enumerate(channels):
+            fpath = os.path.join(filedir, channel_to_dirname[chname], fname)
+            metadata = {'filename':imgpath, 'pixel_size':pixel_size}
+            tif.imwrite(fpath, img[i], imagej=True, metadata=metadata)
