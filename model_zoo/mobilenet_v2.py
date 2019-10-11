@@ -4,6 +4,7 @@ import torch.nn.init as init
 import torch.nn.functional as F
 from collections import OrderedDict, deque
 import numpy as np
+import re
 
 class Bottleneck(nn.Module):
 
@@ -111,10 +112,17 @@ class MobileNetV2(nn.Module):
             return feature_maps.pop()
 
 def convert_parameters(parameters):
-    new_params = OrderedDict()
+    """ This function convert old parameter names to new names. If given an OrderedDict
+    with parameter_name:parameter, returns OrderedDict with new_param_name:parameter.
+    If given a list with parameter names, return list with new names.
+    """
     def repl_func(match):
         block_num = match.groups()[1]
         return f'blocks.{int(block_num)-1}'
-    for pname, p in parameters.items():
-        new_params[re.sub("(block_)(\d)", repl_func, pname)] = p
+    if isinstance(parameters, dict):
+        new_params = OrderedDict()
+        for pname, p in parameters.items():
+            new_params[re.sub("(block_)(\d)", repl_func, pname)] = p
+    else:
+        new_params = [re.sub("(block_)(\d)", repl_func, pname) for pname in parameters]
     return new_params
