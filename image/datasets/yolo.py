@@ -31,6 +31,12 @@ class RandomLoader(DataLoader):
             self.dataset.reset()
         return super().__iter__()
 
+    def __len__(self):
+        if isinstance(self.dataset, MultiFileCropDataset):
+            return len(self.dataset) // (self.batch_size)
+        else:
+            return super().__len__()
+
 def get_boxes_from_json(fname, clsname = None):
     with open(fname, 'r') as f:
         boxes = json.load(f)
@@ -341,6 +347,10 @@ class MultiFileCropDataset(IterableDataset):
             id = worker_info.id
             fileslist = self.fileslist[fnum*id:fnum*(id+1)]
         return chain.from_iterable((self.dataset_class(*names, **self.dataset_params) for names in fileslist))
+
+    def __len__(self):
+        """This is a temporary hack"""
+        return len(self.fileslist)*self.dataset_params['length']
 
     def reset(self):
         random.shuffle(self.fileslist)

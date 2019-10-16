@@ -188,6 +188,7 @@ class TrainSession:
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
+            # pbar = tqdm(total = float('inf'), leave=False)
             for inputs, labels in train_data:
                 inputs = inputs.to(self.device)
                 if isinstance(labels, list):
