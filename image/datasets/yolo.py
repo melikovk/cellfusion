@@ -1,7 +1,7 @@
 import json
 import numpy as np
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader, ConcatDataset
+from torch.utils.data import Dataset, DataLoader, ConcatDataset, IterableDataset, get_worker_info
 from ..utils import centerinside
 from ..metrics.localization import iou
 import torch
@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from matplotlib import patches
 import torch.multiprocessing as mp
 import os
+from itertools import chain
+import random
 
 
 NUCLEUS = 0
@@ -25,9 +27,6 @@ class RandomLoader(DataLoader):
         if isinstance(self.dataset, ConcatDataset):
             for dset in self.dataset.datasets:
                 dset.reset()
-            # cpu_num = os.cpu_count()
-            # with mp.Pool(cpu_num) as pool:
-            #     self.dataset.datasets = pool.map(reset_dataset, self.dataset.datasets)
         else:
             self.dataset.reset()
         return super().__iter__()
@@ -325,6 +324,27 @@ class SSDDataset(MultiAnchorDataset):
             return np.concatenate((labels, coordinates))
         else:
             return np.concatenate((labels, coordinates)), clslbls
+
+class MultiFileCropDataset(IterableDataset):
+    def __init__(self, fileslist, dataset_class, dataset_params):
+        super().__init__()
+        self.fileslist = fileslist
+        self.dataset_class = dataset_class
+        self.dataset_params = dataset_params
+
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None:
+            fileslist = self.fileslist
+        else:
+            fnum = len(self.fileslist) // worker_info.num_workers
+            id = worker_info.id
+            fileslist = self.fileslist[fnum*id:fnum*(id+1)]
+        return chain.from_iterable((self.dataset_class(*names, **self.dataset_params) for names in fileslist))
+
+    def reset(self):
+        random.shuffle(self.fileslist)
+
 
 
 def get_cell_anchors(scales, anchors):
