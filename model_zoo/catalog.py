@@ -1,4 +1,6 @@
 from .mobilenet_v2 import MobileNetV2
+from .mobilenet_v2gn import MobileNetV2gn
+from .resnet_v2 import ResNet50V2
 from .cnn_heads import ObjectDetectionHead, ObjectDetectionHeadSplit, ObjectDetectionHeadSplitResBtlneck
 from .vision_models import ObjectDetectionModel
 from image.datasets.yolo import get_cell_anchors
@@ -38,6 +40,22 @@ class MobileNetSplitResBtlneckHead(ObjectDetectionModel):
                        'head_params': head_params}
         cell_anchors = ANCHORS[anchors].copy()
         super().__init__(MobileNetV2(**features_params), ObjectDetectionHeadSplitResBtlneck(anchors = len(cell_anchors), **head_params), cell_anchors)
+
+class MobileNetGNSplitResBtlneckHead(ObjectDetectionModel):
+    def __init__(self, anchors, features_params, head_params):
+        self.config = {'anchors': anchors,
+                       'features_params': features_params,
+                       'head_params': head_params}
+        cell_anchors = ANCHORS[anchors].copy()
+        super().__init__(MobileNetV2gn(**features_params), ObjectDetectionHeadSplitResBtlneck(anchors = len(cell_anchors), **head_params), cell_anchors)
+
+class ResNet50V2SplitResBtlneckHead(ObjectDetectionModel):
+    def __init__(self, anchors, features_params, head_params):
+        self.config = {'anchors': anchors,
+                       'features_params': features_params,
+                       'head_params': head_params}
+        cell_anchors = ANCHORS[anchors].copy()
+        super().__init__(ResNet50V2(**features_params), ObjectDetectionHeadSplitResBtlneck(anchors = len(cell_anchors), **head_params), cell_anchors)
 
 class DenseNetSplitHead(ObjectDetectionModel):
     """ Object detection model with DenseNet feature extractor
