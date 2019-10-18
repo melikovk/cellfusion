@@ -132,16 +132,17 @@ class TrainSession:
         self.epoch = 0
         self.epochs_left = 0
 
-    def train_step(self, inputs, labels):
+    def train_step(self, inputs, labels, accumulate=True):
         # with torch.autograd.detect_anomaly():
-        self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.lossfunc(outputs, labels)
         loss['loss'].backward()
         # Apex
         # with amp.scale_loss(loss['loss'], self.optimizer) as scaled_loss:
         #     scaled_loss.backward()
-        self.optimizer.step()
+        if not accumulate:
+            self.optimizer.step()
+            self.optimizer.zero_grad()
         return (loss, outputs)
 
     @torch.no_grad()
@@ -172,7 +173,7 @@ class TrainSession:
             self.saver.save(self, self.epoch, {**loss, **accuracy})
         return (loss, accuracy)
 
-    def train(self, train_data, valid_data, total_epochs = None, start_epoch=0):
+    def train(self, train_data, valid_data, total_epochs = None, start_epoch=0, batch_size_multiplier=1):
         if total_epochs is None:
              total_epochs = start_epoch + self.epochs_left
         if self.log_dir:
@@ -181,7 +182,9 @@ class TrainSession:
             self.epoch += 1
             self.epochs_left = total_epochs-epoch-1
             self.model.train()
+            self.optimizer.zero_grad()
             train_loss = defaultdict(float)
+            batch_accumulator = 0
             size = 0
             # train_acc = 0.0
             train_acc = defaultdict(float)
@@ -195,7 +198,12 @@ class TrainSession:
                     labels = [label.to(self.device) for label in labels]
                 else:
                     labels = labels.to(self.device)
-                batch_loss, outputs = self.train_step(inputs, labels)
+                if batch_accumulator + 1 < batch_size_multiplier:
+                    batch_loss, outputs = self.train_step(inputs, labels)
+                    batch_accumulator += 1
+                else:
+                    batch_loss, outputs = self.train_step(inputs, labels, accumulate=False)
+                    batch_accumulator = 0
                 # statistics
                 for k, v in batch_loss.items():
                     train_loss[k] += v.item() * inputs.size(0)
