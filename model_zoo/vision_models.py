@@ -6,7 +6,7 @@ from collections import OrderedDict
 from image.metrics.localization import iou
 import json
 from inspect import signature
-from image.datasets.yolo import labels_to_boxes
+from image.datasets.utils import labels_to_boxes
 from functools import partial
 import math
 

@@ -3,7 +3,7 @@ from .mobilenet_v2gn import MobileNetV2gn
 from .resnet_v2 import ResNet50V2
 from .cnn_heads import ObjectDetectionHead, ObjectDetectionHeadSplit, ObjectDetectionHeadSplitResBtlneck
 from .vision_models import ObjectDetectionModel
-from image.datasets.yolo import get_cell_anchors
+from image.datasets.utils import get_cell_anchors
 from .densenet import DenseNet121, DenseNet169, DenseNet201, DenseNet264
 import numpy as np
 
