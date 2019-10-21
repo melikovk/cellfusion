@@ -34,12 +34,12 @@ class CropDataset(Dataset):
     def _data_augmentation(self):
         img = self._img_orig.astype(np.float32)
         boxes = self._boxes_orig.astype(np.float32)
-        for f in self._point_transforms:
-            img = f(img)
+        # for f in self._point_transforms:
+        #     img = f(img)
         for f in self._geom_transforms:
             img, boxes = f(img, boxes)
-        if self._norm_transform is not None:
-            img = self._norm_transform(img)
+        # if self._norm_transform is not None:
+        #     img = self._norm_transform(img)
         boxes = boxes/self._grid_size
         return img, boxes
 
@@ -59,7 +59,12 @@ class CropDataset(Dataset):
 
     def _get_crop(self, idx):
         x, y = self._xys[idx]
-        return self._img[...,x:x+self._w, y:y+self._h]
+        img = self._img[...,x:x+self._w, y:y+self._h]
+        for f in self._point_transforms:
+            img = f(img)
+        if self._norm_transform is not None:
+            img = self._norm_transform(img)
+        return img
 
     def _get_labels(self, idx):
         raise NotImplementedError
