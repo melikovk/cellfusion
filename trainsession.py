@@ -132,11 +132,11 @@ class TrainSession:
         self.epoch = 0
         self.epochs_left = 0
 
-    def train_step(self, inputs, labels, accumulate=True):
+    def train_step(self, inputs, labels, batch_size_multiplier, accumulate=True):
         # with torch.autograd.detect_anomaly():
         outputs = self.model(inputs)
         loss = self.lossfunc(outputs, labels)
-        loss['loss'].backward()
+        (loss['loss']/batch_size_multiplier).backward()
         # Apex
         # with amp.scale_loss(loss['loss'], self.optimizer) as scaled_loss:
         #     scaled_loss.backward()
@@ -199,10 +199,10 @@ class TrainSession:
                 else:
                     labels = labels.to(self.device)
                 if batch_accumulator + 1 < batch_size_multiplier:
-                    batch_loss, outputs = self.train_step(inputs, labels)
+                    batch_loss, outputs = self.train_step(inputs, labels, batch_size_multiplier)
                     batch_accumulator += 1
                 else:
-                    batch_loss, outputs = self.train_step(inputs, labels, accumulate=False)
+                    batch_loss, outputs = self.train_step(inputs, labels, batch_size_multiplier, accumulate=False)
                     batch_accumulator = 0
                 # statistics
                 for k, v in batch_loss.items():
