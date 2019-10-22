@@ -5,7 +5,30 @@ from torch.utils.data import Dataset
 from .utils import get_boxes_from_json
 
 class CropDataset(Dataset):
-    """ Base Dataset Class for all object detection datasets that crop subimages from larger image
+    """ Virtual Base Dataset Class for all object detection datasets that crop
+    subimages from larger image.
+    Args:
+        imgnames (list of image filenames):  1 file for each channel
+        lblname (name of json filewith object box data):  see docs for
+                `get_boxes_from_json` function for description of file format
+        clsname (string): label of class used in the json file, see docs for
+                `get_boxes_from_json` function for details
+        win_size (int: width, int: height): dimensions of the cropped image
+        border_size (int): size of the border not to include into crops
+        grid_size (int): size of the feature map grid
+        point_transforms (list of functions): pointwise augmentation transforms
+            each function should take multichannel image and return an image
+            applied to each crop independently
+        geom_transforms (list of functions): geometric augmentation transforms
+            each function should take multichannel image and list of bounding
+            boxes and return transformed image and boxes
+            applied to the large image upon initialization or reset
+        norm_transform (function): final normalization transform. Should take an
+            image and return an image
+        sample (`random` or `stride`): mode of cropping
+        length (int): number of cropped images to create for `random` cropping
+        seed (int): random seed for `random` cropping
+        stride (int, int): crop stride in case of strided cropping
     """
     def __init__(self, imgnames, lblname, clsname = None, win_size=(224,224), border_size=32,
         grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None,
