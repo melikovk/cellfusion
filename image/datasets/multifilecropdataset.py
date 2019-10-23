@@ -3,6 +3,13 @@ from itertools import chain
 import random
 
 class MultiFileCropDataset(IterableDataset):
+    """ Iterable Dataset to be used with CropDatasets.
+    Given the list of filenames, where each element is of the form
+    [[chanel1, channel2 ...], lbl_fname.json], CropDataset class and
+    CropDataset parameters dinamically creates CropDatasets for each image set
+    in the list and outputs individual crops. All CropDatasets share same
+    parameters.
+    """
     def __init__(self, fileslist, dataset_class, dataset_params):
         super().__init__()
         self.fileslist = fileslist

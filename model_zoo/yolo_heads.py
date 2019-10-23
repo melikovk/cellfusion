@@ -83,7 +83,7 @@ class ConvolutionalBlock(nn.Module):
             x = m(x)
         return x
 
-class ObjectDetectionHead(nn.Module):
+class YoloHead(nn.Module):
     """ Fully convolutional object detection module.
     It is intended to be used on top of convolutional feature extractor.
     Outputs prediction of object presence, coordinates of the bounding box and it's sizes on a dense grid.
@@ -126,7 +126,7 @@ class ObjectDetectionHead(nn.Module):
         x = torch.cat([x[:,:n,:,:],self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], self.eps)], dim = 1)
         return x
 
-class ObjectDetectionHeadSplit(nn.Module):
+class YoloHeadSplit(nn.Module):
     """ Fully convolutional object detection module.
     It is intended to be used on top of convolutional feature extractor.
     Outputs prediction of object presence, coordinates of the bounding box and it's sizes on a dense grid.
@@ -175,7 +175,7 @@ class ObjectDetectionHeadSplit(nn.Module):
         x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps)], dim = 1)
         return x
 
-class ObjectDetectionHeadSplitResBtlneck(nn.Module):
+class YoloHeadSplitResBtlneck(nn.Module):
     def __init__(self, in_features, anchors=1, clsnums=None, activation='relu',
         repeats = 4, hidden_features = 256, expansion = 3, bn_args={'momentum':0.01},
         act_args={}, coordinate_transform='tanh', eps=1e-5):
@@ -218,8 +218,3 @@ class ObjectDetectionHeadSplitResBtlneck(nn.Module):
             return [x, x_cls]
         else:
             return x
-
-
-#
-# if __name__=="__main__":
-#    main()
