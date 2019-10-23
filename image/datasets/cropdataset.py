@@ -55,6 +55,8 @@ class CropDataset(Dataset):
         self._xys = self._init_coordinates()
 
     def _data_augmentation(self):
+        """ Apply random transformations to an image
+        """
         img = self._img_orig.astype(np.float32)
         boxes = self._boxes_orig.astype(np.float32)
         # for f in self._point_transforms:
@@ -67,6 +69,8 @@ class CropDataset(Dataset):
         return img, boxes
 
     def _init_coordinates(self):
+        """ Initialize crop locations (top-left corners of the crops)
+        """
         if self._sample == 'random':
             if self._seed is not None:
                 np.random.seed(self._seed)
@@ -81,6 +85,9 @@ class CropDataset(Dataset):
             return np.stack(np.meshgrid(xrange, yrange, indexing = 'ij')).reshape(2,-1).T
 
     def _get_crop(self, idx):
+        """ Return cropped image given an index. Applies point transforms and
+        normalization to the crop
+        """
         x, y = self._xys[idx]
         img = self._img[...,x:x+self._w, y:y+self._h]
         for f in self._point_transforms:
@@ -90,6 +97,8 @@ class CropDataset(Dataset):
         return img
 
     def _get_labels(self, idx):
+        """ This method should return labels for the crop
+        """
         raise NotImplementedError
 
     def __len__(self):

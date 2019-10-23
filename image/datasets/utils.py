@@ -12,6 +12,18 @@ FUSION = 1
 NOFUSION = 0
 
 def get_boxes_from_json(fname, clsname = None):
+    """ Return bounding box coordinates and class labels from JSON file.
+    JSON file should contain a list of dictionaries with 1 dictionary for each
+    object. Dictionary should have a key 'bounds' containing left, top, width
+    and height of the bounding box and a key with the same name as clsname if
+    clsname is not None.
+    Args:
+        filename: string
+        clsname: string
+    Returns:
+        boxes: ndarray(N,4)
+        clslbl: ndarray(N,)
+    """
     with open(fname, 'r') as f:
         boxes = json.load(f)
     if clsname is None:
