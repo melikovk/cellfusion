@@ -75,7 +75,7 @@ def get_cell_anchors(scales, anchors):
     return np.array(cell_anchors)
 
 def get_grid_anchors(cell_anchors, w, h):
-    """Create a grid of anchors give array of cell anchors and width and height
+    """Create a grid of anchors given array of cell anchors and width and height
     of the grid. Returns ndarray of shape (4, NAnchors, w, h)
     """
     anchors_grid = np.mgrid[0:w,0:h]

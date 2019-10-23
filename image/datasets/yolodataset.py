@@ -1,5 +1,6 @@
 import numpy as np
 from ..metrics.localization import iou
+from .utils import get_grid_anchors
 from .multianchordataset import MultiAnchorDataset
 
 
@@ -9,10 +10,13 @@ class YoloDataset(MultiAnchorDataset):
     set ignore label (-1 for objectness) for anchors that have iou higher than specified threshold
     with any true box.
     """
-    def __init__(self, imgname, lblname, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
+    def __init__(self, imgname, lblname, grid_size = 32, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
+        super().__init__(imgname, lblname, **kwargs)
         self._ignore_thresh = anchor_ignore_threshold
         self._denominator = denominator
-        super().__init__(imgname, lblname, **kwargs)
+        self._grid_size = grid_size
+        self._anchors = get_grid_anchors(self._cell_anchors, self._w/self._grid_size, self._h/self._grid_size).transpose(1,2,3,0)
+
 
     def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
@@ -23,6 +27,7 @@ class YoloDataset(MultiAnchorDataset):
         xs, ys, ws, hs = np.split(coordinates, 4)
         # Filter out boxes that overlap less than threshold with the window
         boxes, boxcls = self._get_boxes(idx)
+        boxes = boxes/self._grid_size
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         ignore_mask = (iou_matrix > self._ignore_thresh).any(axis=-1)
         labels[ignore_mask] = -1.0

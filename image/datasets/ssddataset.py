@@ -1,5 +1,6 @@
 import numpy as np
 from ..metrics.localization import iou
+from .utils import get_grid_anchors
 from .multianchordataset import MultiAnchorDataset
 
 class SSDDataset(MultiAnchorDataset):
@@ -9,12 +10,15 @@ class SSDDataset(MultiAnchorDataset):
     Anchors that have IOU with all true boxes below another threshold (around 0.3) are
     set to background. All other anchors are set to ignore and ignored during training.
     """
-    def __init__(self, imgname, lblname, positive_anchor_threshold = 0.7,
-                 background_anchor_threshold = 0.5, denominator = 'union', **kwargs):
+    def __init__(self, imgname, lblname, grid_size = 32, positive_anchor_threshold = 0.7,
+        background_anchor_threshold = 0.5, denominator = 'union', **kwargs):
+        super().__init__(imgname, lblname, **kwargs)
         self._positive_thresh = positive_anchor_threshold
         self._bkg_thresh = background_anchor_threshold
         self._denominator = denominator
-        super().__init__(imgname, lblname, **kwargs)
+        self._grid_size = grid_size
+        self._anchors = get_grid_anchors(self._cell_anchors, self._w/self._grid_size, self._h/self._grid_size).transpose(1,2,3,0)
+
 
     def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
@@ -22,6 +26,7 @@ class SSDDataset(MultiAnchorDataset):
         anchors = self._anchors.reshape(-1,4)
         # Filter out boxes that overlap less than threshold with the window
         boxes, boxcls = self._get_boxes(idx)
+        boxes = boxes/self._grid_size
         # If there are no true boxes in the window, return label with all background
         if boxes.shape[0] == 0:
             if boxcls is None:

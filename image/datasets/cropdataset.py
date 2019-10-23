@@ -15,7 +15,6 @@ class CropDataset(Dataset):
                 `get_boxes_from_json` function for details
         win_size (int: width, int: height): dimensions of the cropped image
         border_size (int): size of the border not to include into crops
-        grid_size (int): size of the feature map grid
         point_transforms (list of functions): pointwise augmentation transforms
             each function should take multichannel image and return an image
             applied to each crop independently
@@ -30,13 +29,12 @@ class CropDataset(Dataset):
         seed (int): random seed for `random` cropping
         stride (int, int): crop stride in case of strided cropping
     """
-    def __init__(self, imgnames, lblname, clsname = None, win_size=(224,224), border_size=32,
-        grid_size=32, point_transforms=[], geom_transforms=[], norm_transform=None,
+    def __init__(self, imgnames, lblname, clsname = None, win_size=(224,224),
+        border_size=32, point_transforms=[], geom_transforms=[], norm_transform=None,
         sample='random', length = None, seed=None, stride=None):
         self._fname = lblname
         self._img_orig = np.stack([np.asarray(Image.open(imgname)).T for imgname in imgnames])
         self._w, self._h = win_size
-        self._grid_size = grid_size
         self._border_size = border_size
         self._point_transforms = point_transforms
         self._geom_transforms = geom_transforms
@@ -51,7 +49,7 @@ class CropDataset(Dataset):
             self._boxcls = None
         else:
             self._boxes_orig, self._boxcls = get_boxes_from_json(lblname, clsname)
-        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)/self._grid_size
+        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
         self._xys = self._init_coordinates()
 
     def _data_augmentation(self):
@@ -65,7 +63,7 @@ class CropDataset(Dataset):
             img, boxes = f(img, boxes)
         # if self._norm_transform is not None:
         #     img = self._norm_transform(img)
-        boxes = boxes/self._grid_size
+        boxes = boxes
         return img, boxes
 
     def _init_coordinates(self):
