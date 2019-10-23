@@ -3,22 +3,9 @@ from . import CropDataset
 from ..utils import centerinside
 
 class NaiveBoxDataset(CropDataset):
-    """ Simple dataset class to be used in pytorch
-    Takes:
-        data: Tuple(imgname, lblname, winsize, stride, bsize, transforms)
-                imgname - path to image large image
-                lblname - path to file with bounding boxes
-                winsize - size of the window crops (w, h)
-                stride - stride of the window crops
-                bsize - size of the border to ignore
-                transforms - transforms
-        transform: callable object to transform each image
-    Return:
-        Dataset instance
-
-    File with bounding boxes may contain boxes labelled as "ignore" if any ignore box overlaps
-    window more than ignore_thresh the window is skipped, if any nucleus box overlaps window
-    less than nuc_thresh window is also ignored, windows without any nuclei ignored as well
+    """ Simple CropDataset class.
+    Does not use anchor boxes (i.e. grid_cell is the single anchor box).
+    Assignes boxes to the grid cells based on the position of the box center.
     """
     def __init__(self, imgname, lblname, grid_size = 32, **kwargs):
         super().__init__(imgname, lblname, **kwargs)

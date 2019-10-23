@@ -4,10 +4,10 @@ from .utils import get_grid_anchors
 from .multianchordataset import MultiAnchorDataset
 
 class SSDDataset(MultiAnchorDataset):
-    """ Concrete multianchor dataset that uses SSD like box assignement. We assign
-    each true box to multiple anchors (anchor with highest IOU for this box and
-    any other anchor with IOU higher than the threshold (0.5 to 0.7)).
-    Anchors that have IOU with all true boxes below another threshold (around 0.3) are
+    """ Concrete multianchor CropDataset.
+    Each true box can be assigned to multiple anchors (anchor with highest IOU
+    for this box and any other anchor with IOU higher than the threshold (0.5 to 0.7)).
+    Anchors that have IOU with all true boxes below specified threshold (around 0.3) are
     set to background. All other anchors are set to ignore and ignored during training.
     """
     def __init__(self, imgname, lblname, grid_size = 32, positive_anchor_threshold = 0.7,

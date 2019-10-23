@@ -5,10 +5,11 @@ from .multianchordataset import MultiAnchorDataset
 
 
 class YoloDataset(MultiAnchorDataset):
-    """ Concrete multianchor dataset that uses Yolo like box assignement. We assign
-    each box to only one anchor (anchor with highest iou with the box) and
-    set ignore label (-1 for objectness) for anchors that have iou higher than specified threshold
-    with any true box.
+    """ Concrete multianchor CropDataset.
+    Each true box is assigned to only one anchor (anchor with highest IOU with
+    the box) and we set ignore label (-1 for objectness) for anchors that have
+    IOU higher than specified threshold with any true box, unless they have
+    been assigned to true box
     """
     def __init__(self, imgname, lblname, grid_size = 32, anchor_ignore_threshold = 0.5, denominator = 'union', **kwargs):
         super().__init__(imgname, lblname, **kwargs)

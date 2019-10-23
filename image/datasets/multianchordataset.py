@@ -5,7 +5,7 @@ from .cropdataset import CropDataset
 class MultiAnchorDataset(CropDataset):
     """ Virtual class that extends CropDataset class. Base class for
     CropDatasets that use cell anchors for object box assignment. For each crop
-    only objects that overlap crop window with iou > threshold are used in label
+    only objects that overlap crop window with IOU > threshold are used in label
     assignement.
     """
     def __init__(self, imgname, lblname, cell_anchors, window_overlap_threshold = .25, **kwargs):
