@@ -253,6 +253,10 @@ def split_imagej_channels(imgpath, filedir, index, channel_to_dirname = CHANNELS
         channels = implus.micromanager_metadata['Summary']['ChNames']
         pixel_size = implus.micromanager_metadata['Summary']['PixelSize_um']
         for i, chname in enumerate(channels):
-            fpath = os.path.join(filedir, channel_to_dirname[chname], fname)
+            try:
+                fpath = os.path.join(filedir, channel_to_dirname[chname], fname)
+            except KeyError:
+                print(f"Unexpected channel {chname} in image {imgpath}")
+                return
             metadata = {'filename':imgpath, 'pixel_size':pixel_size}
             tif.imwrite(fpath, img[i], imagej=True, metadata=metadata)
