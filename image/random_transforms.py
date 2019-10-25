@@ -149,19 +149,18 @@ class RandomFlip:
         return out_img if boxes is None else (out_img, out_boxes)
 
 class RandomZoom:
-    def __init__(self, min_zoom = .5, max_zoom = 2, keep_aspect = True, seed = None, interpolation = cv2.INTER_CUBIC):
-        self.min_zoom = min_zoom
-        self.max_zoom = max_zoom
+    def __init__(self, choices = (0.5,1,2), keep_aspect = True, seed = None, interpolation = cv2.INTER_CUBIC):
+        self.choices = choices
         self.keep_aspect = keep_aspect
         self.gen = np.random.RandomState(seed)
         self.interpolation = interpolation
 
     def __call__(self, img, boxes = None):
         if self.keep_aspect:
-            fx = fy = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
+            fx = fy = self.gen.choice(self.choices)
         else:
-            fx = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
-            fy = self.gen.uniform(low=self.min_zoom, high=self.max_zoom)
+            fx = self.gen.choice(self.choices)
+            fy = self.gen.choice(self.choices)
         if len(img.shape)==2:
             img = np.expand_dims(img, 0)
         out_img = []
