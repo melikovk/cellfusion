@@ -82,6 +82,8 @@ class SessionSaver:
             'overwrite':self.overwrite,
             'bestonly':self.bestonly,
             'metric': self.metric,
+            'bestepoch': self.bestepoch,
+            'patience': self.patience,
             'direction': self.direction}
         return state
 
@@ -93,6 +95,8 @@ class SessionSaver:
         self.bestonly = state['bestonly']
         self.metric = state['metric']
         self.direction = state['direction']
+        self.bestepoch = state['bestepoch']
+        self.patience = state['patience']
 
 
 class TrainSession:
