@@ -41,17 +41,19 @@ class SessionSaver:
     """ A class for saving pytorch training sesssion
     It requires a full path (path + filename) where to save the training sesssion file.
     """
-    def __init__(self, path, frequency = 1, overwrite = True, bestonly = True, metric = 'loss', ascending = False):
+    def __init__(self, path, frequency = 1, bestonly = True, overwrite = True, metric = 'loss', ascending = False, patience = 0):
         if path.endswith('.tar'):
             self.path = path[:-4]
         else:
             self.path = path
         self.frequency = frequency
-        self.overwrite = overwrite
         self.bestonly = bestonly
+        self.overwrite = True if bestonly else overwrite
         self.metric = metric
         self.direction = -1 if ascending else 1
         self.bestmetric = None
+        self.bestepoch = None
+        self.patience = patience if bestonly else 0
 
 
     def save(self, session, epoch, metrics):
@@ -65,11 +67,13 @@ class SessionSaver:
             torch.save(session.state_dict(), fname)
         elif self.bestmetric is None or metrics[self.metric]*self.direction < self.bestmetric*self.direction:
             self.bestmetric = metrics[self.metric]
-            if self.overwrite:
-                fname = self.path+'.tar'
-            else:
-                fname = f'{self.path}_{epoch}.tar'
+            self.bestepoch = epoch
+            fname = self.path+'.tar'
             torch.save(session.state_dict(), fname)
+        if self.patience > 0 and epoch - self.bestepoch > self.patience:
+            return False
+        else:
+            return True
 
     def state_dict(self):
         state = {'bestmetric':self.bestmetric,
@@ -146,7 +150,7 @@ class TrainSession:
         return (loss, outputs)
 
     @torch.no_grad()
-    def evaluate(self, data, update_saver = True):
+    def evaluate(self, data):
         self.model.eval()
         loss = defaultdict(float)
         size = 0
@@ -169,8 +173,6 @@ class TrainSession:
             loss[k] = loss[k]/size
         for k, v in accuracy.items():
             accuracy[k] = accuracy[k]/size
-        if self.saver and update_saver:
-            self.saver.save(self, self.epoch, {**loss, **accuracy})
         return (loss, accuracy)
 
     def train(self, train_data, valid_data, total_epochs = None, start_epoch=0, batch_size_multiplier=1):
@@ -186,12 +188,10 @@ class TrainSession:
             train_loss = defaultdict(float)
             batch_accumulator = 0
             size = 0
-            # train_acc = 0.0
             train_acc = defaultdict(float)
             if self.scheduler:
                 self.scheduler.step(epoch)
             pbar = tqdm(total = len(train_data), leave = False)
-            # pbar = tqdm(total = float('inf'), leave=False)
             for inputs, labels in train_data:
                 inputs = inputs.to(self.device)
                 if isinstance(labels, list):
@@ -207,7 +207,6 @@ class TrainSession:
                 # statistics
                 for k, v in batch_loss.items():
                     train_loss[k] += v.item() * inputs.size(0)
-                # train_acc += self.acc_func(outputs, labels).item()
                 with torch.no_grad():
                     batch_acc = self.acc_func(self.model.get_prediction(outputs), self.model.get_targets(labels))
                 for k, v in batch_acc.items():
@@ -216,7 +215,6 @@ class TrainSession:
                 pbar.update(1)
             for k, v in train_loss.items():
                 train_loss[k] = train_loss[k]/size
-            # train_acc = train_acc / size
             for k, v in train_acc.items():
                 train_acc[k] = train_acc[k]/size
             valid_loss, valid_acc = self.evaluate(valid_data)
@@ -236,6 +234,10 @@ class TrainSession:
                     metrics[k+'/validation'] = v
                 for metric, value in metrics.items():
                     writer.add_scalar(metric, value, self.epoch)
+            if self.saver is not None:
+                if not self.saver.save(self, self.epoch, {**valid_loss, **valid_acc}):
+                    pbar.close()
+                    return
             pbar.close()
 
     def update_lr(self, factor):
