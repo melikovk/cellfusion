@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 from tqdm.auto import tqdm
 from collections import OrderedDict, defaultdict
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from image.datasets.utils import labels_to_boxes, get_cell_anchors, get_boxes_from_json
 from image.metrics.localization import nms
