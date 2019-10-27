@@ -56,29 +56,7 @@ class Block(nn.Module):
             x = m(x)
         return x
 
-# class MobileNetV2(nn.Module):
-#
-#     def __init__(self, in_channels, out_channels=(32,16,24,32,64,96,160,320), repeats=(1,2,3,4,3,3,1), strides=(1,2,2,2,1,2,1), expansions=(1,6,6,6,6,6,6), bn_args={'momentum':0.01}):
-#         super().__init__()
-#         self.grid_size = np.prod(strides)*2
-#         self.conv_init = nn.Conv2d(in_channels, out_channels[0], 3, stride=2, padding=1)
-#         self.bn_init = nn.BatchNorm2d(out_channels[0], **bn_args)
-#         self.activation_init = nn.ReLU6()
-#         for i in range(len(expansions)):
-#             self.add_module(f'block_{i+1}',Block(out_channels[i], out_channels[i+1], repeats[i], strides[i], expansions[i], bn_args))
-#         # Parameter initialization
-#         init.kaiming_uniform_(self.conv_init.weight, mode='fan_in', nonlinearity='relu')
-#         init.zeros_(self.conv_init.bias)
-#         init.ones_(self.bn_init.weight)
-#         init.zeros_(self.bn_init.bias)
-#
-#     def forward(self,x):
-#         for m in self._modules.values():
-#             x = m(x)
-#         return x
-
 class MobileNetV2(nn.Module):
-
     def __init__(self, in_channels, features_num = 1, out_channels=(32,16,24,32,64,96,160,320),
         repeats=(1,2,3,4,3,3,1), strides=(1,2,2,2,1,2,1), expansions=(1,6,6,6,6,6,6), bn_args={'momentum':0.01}):
 
