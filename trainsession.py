@@ -183,7 +183,7 @@ class TrainSession:
         if total_epochs is None:
              total_epochs = start_epoch + self.epochs_left
         if self.log_dir:
-            writer = SummaryWriter(self.log_dir, purge_step = self.epoch)
+            writer = SummaryWriter(self.log_dir, purge_step = self.epoch+1)
         for epoch in range(start_epoch, total_epochs):
             self.epoch += 1
             self.epochs_left = total_epochs-epoch-1
@@ -287,7 +287,8 @@ class TrainSession:
                  'model': self.model.state_dict(),
                  'model_type': {'name':type(self.model).__name__, 'module':type(self.model).__module__},
                  'model_config': self.model.config,
-                 'optimizer': _map_param_ids_to_names(self.optimizer.state_dict(), self.model),
+                 'param_groups': map_ids_to_names(self.optimizer.state_dict()['param_groups'], self.model),
+                 'optimizer': self.optimizer.state_dict(),
                  'optimizer_type': {'name':type(self.optimizer).__name__, 'module':type(self.optimizer).__module__},
                  'lossfunc':self.lossfunc.state_dict(),
                  'lossfunc_type':{'name':type(self.lossfunc).__name__, 'module':type(self.lossfunc).__module__},
@@ -323,7 +324,9 @@ class TrainSession:
         lossfunc = getattr(import_module(state['lossfunc_type']['module']), state['lossfunc_type']['name'])()
         acc_func = getattr(import_module(state['acc_func_type']['module']), state['acc_func_type']['name'])()
         named_params = dict(model.named_parameters())
-        param_groups = [{'params':[named_params[p] for p in g['params']]} for g in state['optimizer']['param_groups']]
+        param_groups = [group.copy() for group in state['param_groups']]
+        for g in param_groups:
+            g['params'] = [named_params[name] for name in g['params']]
         optimizer = getattr(import_module(state['optimizer_type']['module']), state['optimizer_type']['name'])
         scheduler = getattr(import_module(state['scheduler_type']['module']), state['scheduler_type']['name']) if 'scheduler' in state else None
         scheduler_params = state['scheduler_params'] if 'scheduler' in state else None
@@ -335,12 +338,12 @@ class TrainSession:
         session.load_state_dict(state)
         return session
 
-def _map_param_ids_to_names(opt_state, model):
+def map_ids_to_names(param_groups, model):
     reverse_dict = {id(parameter):name for name, parameter in model.named_parameters()}
-    new_state = opt_state.copy()
-    for g in new_state['param_groups']:
-        g['params'] = [reverse_dict[i] for i in g['params']]
-    return new_state
+    new_groups = [group.copy() for group in param_groups]
+    for g in new_groups:
+        g['params'] = [reverse_dict[id] for id in g['params']]
+    return new_groups
 
 def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale = 1):
     """ Given model and name of image file predict boxes
