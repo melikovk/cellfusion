@@ -89,6 +89,13 @@ class ResNetV2(nn.Module):
             channels = channels * expansion
         self.bn_final = nn.BatchNorm2d(channels, **bn_args)
         self.activation_final = nn.ReLU6()
+        # Parameter initialization
+        init.kaiming_uniform_(self.conv_init.weight, mode='fan_in', nonlinearity='relu')
+        init.zeros_(self.conv_init.bias)
+        init.ones_(self.bn_init.weight)
+        init.zeros_(self.bn_init.bias)
+        init.ones_(self.bn_final.weight)
+        init.zeros_(self.bn_final.bias)
 
     def forward(self, x):
         feature_maps = deque(maxlen=self.features_num)
@@ -101,7 +108,7 @@ class ResNetV2(nn.Module):
         x = self.activation_final(self.bn_final(block(x)))
         feature_maps.append(x)
         if self.features_num > 1:
-            return feature_maps
+            return list(reversed(feature_maps))
         else:
             return feature_maps.pop()
 
