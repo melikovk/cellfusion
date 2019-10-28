@@ -116,13 +116,14 @@ class YoloHead(nn.Module):
             self.coord_func = nn.Sigmoid()
         else:
             self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
-        self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
-        self.activ0 = _activation[activation](**act_args)
+        # self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
+        # self.activ0 = _activation[activation](**act_args)
         self.conv_block = ConvolutionalBlock(in_features, 5*self.anchors,hidden_features, hidden_kernels, activation, bn_args, act_args)
 
     def forward(self, x):
         n = self.anchors
-        x = self.conv_block(self.activ0(self.bn0(x)))
+        # x = self.conv_block(self.activ0(self.bn0(x)))
+        x = self.conv_block(x)
         x = torch.cat([x[:,:n,:,:],self.coord_func(x[:,n:3*n,:,:]),torch.max(x[:,3*n:,:,:], self.eps)], dim = 1)
         return x
 
@@ -159,17 +160,17 @@ class YoloHeadSplit(nn.Module):
             self.coord_func = nn.Sigmoid()
         else:
             self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
-        self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
-        self.activ0 = _activation[activation](**act_args)
+        # self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
+        # self.activ0 = _activation[activation](**act_args)
         self.object_subnet = ConvolutionalBlock(in_features, self.anchors, hidden_features, hidden_kernels, activation, bn_args, act_args)
         self.box_subnet = ConvolutionalBlock(in_features, 4*self.anchors, hidden_features, hidden_kernels, activation, bn_args, act_args)
         # Parameter initialization
-        init.ones_(self.bn0.weight)
-        init.zeros_(self.bn0.bias)
+        # init.ones_(self.bn0.weight)
+        # init.zeros_(self.bn0.bias)
 
     def forward(self, x):
         n = self.anchors
-        x = self.activ0(self.bn0(x))
+        # x = self.activ0(self.bn0(x))
         x_obj = self.object_subnet(x)
         x_box = self.box_subnet(x)
         x = torch.cat([x_obj, self.coord_func(x_box[:,:2*n,:,:]), torch.max(x_box[:,2*n:,:,:], self.eps)], dim = 1)
@@ -191,8 +192,8 @@ class YoloHeadSplitResBtlneck(nn.Module):
             self.coord_func = nn.Sigmoid()
         else:
             self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
-        self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
-        self.activ0 = _activation[activation](**act_args)
+        # self.bn0 = nn.BatchNorm2d(in_features, **bn_args)
+        # self.activ0 = _activation[activation](**act_args)
         self.object_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features,
             repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
         self.object_out = nn.Conv2d(hidden_features, self.anchors, 1)
@@ -202,12 +203,12 @@ class YoloHeadSplitResBtlneck(nn.Module):
         if clsnums is not None:
             self.cls_out = nn.Conv2d(hidden_features, self.anchors*clsnums, 1)
         # Parameter initialization
-        init.ones_(self.bn0.weight)
-        init.zeros_(self.bn0.bias)
+        # init.ones_(self.bn0.weight)
+        # init.zeros_(self.bn0.bias)
 
     def forward(self,x):
         n = self.anchors
-        x = self.activ0(self.bn0(x))
+        # x = self.activ0(self.bn0(x))
         x_obj_subnet = self.object_subnet(x)
         x_obj = self.object_out(x_obj_subnet)
         x_box = self.box_out(self.box_subnet(x))
