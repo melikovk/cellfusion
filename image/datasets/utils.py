@@ -84,7 +84,7 @@ def get_grid_anchors(cell_anchors, w, h):
     anchors_grid = anchors_grid + cell_anchors.T.reshape((4,-1,1,1))
     return anchors_grid
 
-def labels_to_boxes(labels, grid_size, cell_anchors, clslbls=None, threshold = 0.5, offset=(0,0)):
+def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,0)):
     """ Function to convert object loacalization model output to bounding boxes
     Parameters:
         labels:     [5*n_anchors:width:height] or
@@ -102,10 +102,7 @@ def labels_to_boxes(labels, grid_size, cell_anchors, clslbls=None, threshold = 0
         if given batch return list of the predictions for each image
     """
     if len(labels.shape) == 4:
-        if clslbls is None:
-            return [labels_to_boxes(img, grid_size, cell_anchors, clslbls, threshold, offset) for img in labels]
-        else:
-            return [labels_to_boxes(img, grid_size, cell_anchors, imgcls, threshold, offset) for img, imgcls in zip(labels, clslbls)]
+        return [labels_to_boxes(img, grid_size, cell_anchors, threshold, offset) for img in labels]
     if isinstance(offset, int):
         offx = offy = offset
     else:
@@ -114,11 +111,12 @@ def labels_to_boxes(labels, grid_size, cell_anchors, clslbls=None, threshold = 0
     # Create grid of all anchors
     anchors_grid = get_grid_anchors(cell_anchors, w, h).reshape((4,-1))
     # Select booxes
-    labels = labels.cpu().numpy().reshape((5, -1))
+    n_anchors = cell_anchors.shape[0]
+    box_labels = labels[-5*n_anchors:,...].cpu().numpy().reshape((5, -1))
     logit_threshold = math.log(threshold/(1-threshold))
-    idx = (labels[0] > logit_threshold).nonzero()[0]
-    scores = labels[0, idx]
-    boxes = labels[1:, idx]
+    idx = (box_labels[0] > logit_threshold).nonzero()[0]
+    scores = box_labels[0, idx]
+    boxes = box_labels[1:, idx]
     anchors_grid = anchors_grid[:, idx]
     # Recalculate box sizes and positions
     boxes[:2] = (boxes[:2] - boxes[-2:]/2) * anchors_grid[-2:] + anchors_grid[:2]
@@ -127,9 +125,11 @@ def labels_to_boxes(labels, grid_size, cell_anchors, clslbls=None, threshold = 0
     boxes[0] += offx
     boxes[1] += offy
     # get class labels or class scores if needed
-    if clslbls is not None:
-        boxcls = clslbls.cpu().numpy().reshape((-1, labels.shape[-1]))[:, idx].T
-    return (boxes.T, scores) if clslbls is None else (boxes.T, scores, boxcls)
+    if labels.shape[0] > 5*n_anchors:
+        boxcls = labels[:-5*n_anchors].cpu().numpy().reshape((-1, box_labels.shape[-1]))[:, idx].T
+        return boxes.T, scores, boxcls
+    else:
+        return boxes.T, scores
 
 def show_boxes(image, labels, grid_size, cell_anchors, threshold=0.5):
     """

@@ -42,7 +42,7 @@ class YoloDataset(MultiAnchorDataset):
         hs[match_idxs] = boxes[:,3]/anchors[match_idxs, 3]
         # Set class labels if needed
         if boxcls is not None:
-            clslbls = np.full_like(labels, -1, dtype=np.long)
+            clslbls = np.full_like(labels, -1)
             clslbls[match_idxs] = boxcls[np.arange(match_idxs.shape[0], dtype=np.long)]
             clslbls = clslbls.reshape((n_anchors, w, h))
         # Reshape
@@ -51,4 +51,4 @@ class YoloDataset(MultiAnchorDataset):
         if boxcls is None:
             return np.concatenate((labels, coordinates))
         else:
-            return np.concatenate((labels, coordinates)), clslbls
+            return np.concatenate((clslbls, labels, coordinates))

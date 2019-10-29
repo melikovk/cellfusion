@@ -64,7 +64,7 @@ class SSDDataset(MultiAnchorDataset):
         hs[match_mask] = boxes[labels[match_mask]-1,3]/anchors[match_mask, 3]
         # Set class labels if needed
         if boxcls is not None:
-            clslbls = np.full_like(labels, -1, dtype=np.long)
+            clslbls = np.full_like(labels, -1)
             clslbls[match_mask] = boxcls[labels[match_mask]-1]
             clslbls = clslbls.reshape((n_anchors, w, h))
         labels[labels>0] = 1
@@ -73,4 +73,4 @@ class SSDDataset(MultiAnchorDataset):
         if boxcls is None:
             return np.concatenate((labels, coordinates))
         else:
-            return np.concatenate((labels, coordinates)), clslbls
+            return np.concatenate((clslbls, labels, coordinates))
