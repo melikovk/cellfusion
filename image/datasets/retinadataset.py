@@ -30,9 +30,11 @@ class RetinaDataset(MultiAnchorDataset):
         # If there are no true boxes in the window, return label with all background
         if boxes.shape[0] == 0:
             if boxcls is None:
-                return [np.zeros((5*anchors_per_cell, w//gs, h//gs)) for gs in self._grid_sizes]
+                return [np.zeros((5*anchors_per_cell, w//gs, h//gs), dtype=np.float32) for gs in self._grid_sizes]
             else:
-                return np.zeros((5*n_anchors, w, h)), np.full((n_anchors, w, h), -1, dtype=np.long) # This is wrong
+                return [np.conatenate(np.zeros((5*n_anchors, w//gs, h//gs), np.float32),
+                                      np.full((n_anchors, w//gs, h//gs), -1, dtype=np.float32))
+                        for gs in self._grid_sizes]
         # Initialize output arrays
         labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
@@ -77,12 +79,10 @@ class RetinaDataset(MultiAnchorDataset):
         ws = np.split(ws, anchor_counts[:-1])
         hs = np.split(hs, anchor_counts[:-1])
         if boxcls is None:
-            out = [np.concatenate([l, bx, by, bw, bh]).reshape(5*anchors_per_cell, w//gs, h//gs)
+            out = [np.concatenate([l, bx, by, bw, bh]).reshape(5*anchors_per_cell, w//gs, h//gs).astype(np.float32)
                    for l, bx, by, bw, bh, gs in zip(labels, xs, ys, ws, hs, self._grid_sizes)]
             return out
         else:
-            out = [np.concatenate(cl.reshape(anchors_per_cell,w//gs,h//gs),
-                                  l.reshape(anchors_per_cell,w//gs, h//gs),
-                                  c.reshape(4*anchors_per_cell,w//gs,h//gs))
-                   for cl, l, c, gs in zip(clslbls, labels, coordinates, self._grid_sizes)]
+            out = [np.concatenate([cl, l, bx, by, bw, bh]).reshape(6*anchors_per_cell, w//gs, h//gs).astype(np.float32)
+                   for cl, l, bx, by, bw, bh, gs in zip(clslbls, labels, xs, ys, ws, hs, self._grid_sizes)]
             return out

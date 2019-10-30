@@ -30,9 +30,9 @@ class SSDDataset(MultiAnchorDataset):
         # If there are no true boxes in the window, return label with all background
         if boxes.shape[0] == 0:
             if boxcls is None:
-                return np.zeros((5*n_anchors, w, h))
+                return np.zeros((5*n_anchors, w, h), dtype = np.float32)
             else:
-                return np.zeros((5*n_anchors, w, h)), np.full((n_anchors, w, h), -1, dtype=np.long) # This is wrong
+                return np.concatenate([np.zeros((5*n_anchors, w, h), dtype=np.float32), np.full((n_anchors, w, h), -1, dtype=np.float32)])
         labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)
@@ -71,6 +71,6 @@ class SSDDataset(MultiAnchorDataset):
         labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
         if boxcls is None:
-            return np.concatenate((labels, coordinates))
+            return np.concatenate((labels, coordinates)).astype(np.float32)
         else:
-            return np.concatenate((clslbls, labels, coordinates))
+            return np.concatenate((clslbls, labels, coordinates)).astype(np.float32)

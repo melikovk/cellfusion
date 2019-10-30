@@ -29,6 +29,12 @@ class YoloDataset(MultiAnchorDataset):
         # Filter out boxes that overlap less than threshold with the window
         boxes, boxcls = self._get_boxes(idx)
         boxes = boxes/self._grid_size
+        # If there are no true boxes in the window, return label with all background
+        if boxes.shape[0] == 0:
+            if boxcls is None:
+                return np.zeros((5*n_anchors, w, h), dtype = np.float32)
+            else:
+                return np.concatenate([np.zeros((5*n_anchors, w, h), dtype=np.float32), np.full((n_anchors, w, h), -1, dtype=np.float32)])
         iou_matrix = iou(anchors, boxes, denominator=self._denominator)
         ignore_mask = (iou_matrix > self._ignore_thresh).any(axis=-1)
         labels[ignore_mask] = -1.0
@@ -49,6 +55,6 @@ class YoloDataset(MultiAnchorDataset):
         labels = labels.reshape((n_anchors, w, h))
         coordinates = coordinates.reshape((4*n_anchors, w, h))
         if boxcls is None:
-            return np.concatenate((labels, coordinates))
+            return np.concatenate((labels, coordinates)).astype(np.float32)
         else:
-            return np.concatenate((clslbls, labels, coordinates))
+            return np.concatenate((clslbls, labels, coordinates)).astype(np.float32)

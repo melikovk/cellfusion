@@ -92,7 +92,7 @@ class CropDataset(Dataset):
             img = f(img)
         if self._norm_transform is not None:
             img = self._norm_transform(img)
-        return img
+        return img.astype(np.float32)
 
     def _get_labels(self, idx):
         """ This method should return labels for the crop
@@ -105,25 +105,9 @@ class CropDataset(Dataset):
     def __getitem__(self, idx):
         img = self._get_crop(idx)
         if len(img.shape) < 3:
-            img = torch.unsqueeze(torch.from_numpy(img.astype(np.float32)), 0)
-        else:
-            img = torch.from_numpy(img.astype(np.float32))
-        if self._boxcls is None:
-            labels = self._get_labels(idx)
-            if isinstance(labels, list):
-                labels = [torch.from_numpy(l.astype(np.float32)) for l in labels]
-            else:
-                labels = torch.from_numpy(labels.astype(np.float32))
-        else:
-            lbls  = self._get_labels(idx)
-            try:
-                labels, clslbls = lbls
-            except ValueError:
-                print(lbls.shape, idx, self._fname)
-                raise
-            labels = torch.from_numpy(labels.astype(np.float32))
-            clslbls = torch.from_numpy(clslbls)
-        return (img, labels) if self._boxcls is None else (img, [labels, clslbls])
+            img = np.expand_dims(img, 0)
+        labels = self._get_labels(idx)
+        return img, labels
 
     def reset(self):
         self._img, self._boxes = self._data_augmentation()
