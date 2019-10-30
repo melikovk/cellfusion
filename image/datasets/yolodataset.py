@@ -16,13 +16,13 @@ class YoloDataset(MultiAnchorDataset):
         self._ignore_thresh = anchor_ignore_threshold
         self._denominator = denominator
         self._grid_size = grid_size
-        self._anchors = get_grid_anchors(self._cell_anchors, self._w/self._grid_size, self._h/self._grid_size).transpose(1,2,3,0)
+        self._anchors = get_grid_anchors(self._cell_anchors, self._w//grid_size, self._h//grid_size).reshape(4,-1).T
 
 
     def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
-        n_anchors = self._anchors.shape[0]
-        anchors = self._anchors.reshape(-1,4)
+        n_anchors = self._cell_anchors.shape[0]
+        anchors = self._anchors
         labels = np.zeros(anchors.shape[0])
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)

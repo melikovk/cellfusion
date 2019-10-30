@@ -17,13 +17,13 @@ class SSDDataset(MultiAnchorDataset):
         self._bkg_thresh = background_anchor_threshold
         self._denominator = denominator
         self._grid_size = grid_size
-        self._anchors = get_grid_anchors(self._cell_anchors, self._w/self._grid_size, self._h/self._grid_size).transpose(1,2,3,0)
+        self._anchors = get_grid_anchors(self._cell_anchors, self._w//grid_size, self._h//grid_size).reshape(4,-1).T
 
 
     def _get_labels(self, idx):
         w, h = self._w//self._grid_size, self._h//self._grid_size
-        n_anchors = self._anchors.shape[0]
-        anchors = self._anchors.reshape(-1,4)
+        n_anchors = self._cell_anchors.shape[0]
+        anchors = self._anchors
         # Filter out boxes that overlap less than threshold with the window
         boxes, boxcls = self._get_boxes(idx)
         boxes = boxes/self._grid_size
@@ -32,7 +32,7 @@ class SSDDataset(MultiAnchorDataset):
             if boxcls is None:
                 return np.zeros((5*n_anchors, w, h))
             else:
-                return np.zeros((5*n_anchors, w, h)), np.full((n_anchors, w, h), -1, dtype=np.long)
+                return np.zeros((5*n_anchors, w, h)), np.full((n_anchors, w, h), -1, dtype=np.long) # This is wrong
         labels = np.full(anchors.shape[0], -1)
         coordinates = np.zeros(4*anchors.shape[0])
         xs, ys, ws, hs = np.split(coordinates, 4)

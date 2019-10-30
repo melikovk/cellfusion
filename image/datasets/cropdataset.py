@@ -109,7 +109,11 @@ class CropDataset(Dataset):
         else:
             img = torch.from_numpy(img.astype(np.float32))
         if self._boxcls is None:
-            labels = torch.from_numpy(self._get_labels(idx).astype(np.float32))
+            labels = self._get_labels(idx)
+            if isinstance(labels, list):
+                labels = [torch.from_numpy(l.astype(np.float32)) for l in labels]
+            else:
+                labels = torch.from_numpy(labels.astype(np.float32))
         else:
             lbls  = self._get_labels(idx)
             try:
