@@ -361,15 +361,23 @@ def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale 
         input = torch.from_numpy(img).reshape(1, img.shape[0], w1, h1).to(device)
     else:
         input = torch.from_numpy(transforms(img)).reshape(1, img.shape[0], w1, h1).to(device)
-    boxes, scores = model.predict(input)[0]
+    if len(model.head.clsnums) > 0:
+        boxes, scores, clsscores = model.predict(input)[0]
+    else:
+        boxes, scores = model.predict(input)[0]
     if nms_threshold is not None:
         keep_idx = nms(boxes, scores, nms_threshold)
         boxes = boxes[keep_idx]
         scores = scores[keep_idx]
+        if len(model.head.clsnums) > 0:
+            clsscores = clsscores[keep_idx]
     boxes = boxes * np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
     if upscale is not None:
         boxes = boxes / upscale
-    return boxes, scores
+    if len(model.head.clsnums) > 0:
+        return boxes, scores, clsscores
+    else:
+        return boxes, scores
 
 def evaluate_model(model, fnames, eval_func, clsname=None, **kwargs):
     """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""

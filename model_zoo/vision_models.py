@@ -46,7 +46,10 @@ class ObjectDetectionModel(nn.Module):
     def get_targets(self, x):
         """ Get targets from labels Tensor
         """
-        return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
+        if len(self.head.clsnums) > 0:
+            return [(box, cls) for box, score, cls in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
+        else:
+            return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
 
 
 
