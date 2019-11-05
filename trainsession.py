@@ -13,6 +13,7 @@ import math
 import os.path
 import cv2
 import matplotlib.pyplot as plt
+from session_saver import SessionSaver
 
 # # Apex
 # from apex import amp
@@ -36,68 +37,6 @@ def get_filenames(datadir, channels, boxes = 'boxes/', suffix = ''):
         test_names = [([os.path.join(fdir, channel, fname+'.tif') for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
                         for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines())]
     return train_names, test_names
-
-class SessionSaver:
-    """ A class for saving pytorch training sesssion
-    It requires a full path (path + filename) where to save the training sesssion file.
-    """
-    def __init__(self, path, frequency = 1, bestonly = True, overwrite = True, metric = 'loss', ascending = False, patience = 0):
-        if path.endswith('.tar'):
-            self.path = path[:-4]
-        else:
-            self.path = path
-        self.frequency = frequency
-        self.bestonly = bestonly
-        self.overwrite = True if bestonly else overwrite
-        self.metric = metric
-        self.direction = -1 if ascending else 1
-        self.bestmetric = None
-        self.bestepoch = None
-        self.patience = patience if bestonly else 0
-
-
-    def save(self, session, epoch, metrics):
-        if epoch % self.frequency != 0:
-            return
-        if not self.bestonly:
-            if self.overwrite:
-                fname = self.path+'.tar'
-            else:
-                fname = f'{self.path}_{epoch}.tar'
-            torch.save(session.state_dict(), fname)
-        elif self.bestmetric is None or metrics[self.metric]*self.direction < self.bestmetric*self.direction:
-            self.bestmetric = metrics[self.metric]
-            self.bestepoch = epoch
-            fname = self.path+'.tar'
-            torch.save(session.state_dict(), fname)
-        if self.patience > 0 and epoch - self.bestepoch > self.patience:
-            return False
-        else:
-            return True
-
-    def state_dict(self):
-        state = {'bestmetric':self.bestmetric,
-            'path': self.path,
-            'frequency':self.frequency,
-            'overwrite':self.overwrite,
-            'bestonly':self.bestonly,
-            'metric': self.metric,
-            'bestepoch': self.bestepoch,
-            'patience': self.patience,
-            'direction': self.direction}
-        return state
-
-    def load_state_dict(self, state):
-        self.bestmetric = state['bestmetric']
-        self.path = state['path']
-        self.frequency = state['frequency']
-        self.overwrite = state['overwrite']
-        self.bestonly = state['bestonly']
-        self.metric = state['metric']
-        self.direction = state['direction']
-        self.bestepoch = state['bestepoch']
-        self.patience = state['patience']
-
 
 class TrainSession:
     """ Class to train and save pytorch models
