@@ -16,6 +16,7 @@ class SessionSaver:
         self.metric = metric
         self.direction = -1 if ascending else 1
         self.bestmetric = defaultdict(float)
+        self.lastmetric = defaultdict(float)
         self.beta = beta
         self.patience = patience if bestonly else 0
 
@@ -26,16 +27,17 @@ class SessionSaver:
         newmetric = defaultdict(float)
         newmetric['epoch'] = epoch
         for metric, value in metrics.items():
-            newmetric[metric] = self.bestmetric[metric] + (value - self.bestmetric[metric]) * self.beta
+            newmetric[metric] = self.lastmetric[metric] + (value - self.lastmetric[metric]) * self.beta
+        self.lastmetric = newmetric
         if not self.bestonly:
             if self.overwrite:
                 fname = self.path+'.tar'
             else:
                 fname = f'{self.path}_{epoch}.tar'
-            self.bestmetric = newmetric
+            self.bestmetric = newmetric.copy()
             torch.save(session.state_dict(), fname)
         elif self.metric not in self.bestmetric or newmetric[self.metric]*self.direction < self.bestmetric[metric]*self.direction:
-            self.bestmetric = newmetric
+            self.bestmetric = newmetric.copy()
             fname = self.path+'.tar'
             torch.save(session.state_dict(), fname)
         if self.patience > 0 and epoch - self.bestmetric['epoch'] > self.patience:
@@ -45,6 +47,7 @@ class SessionSaver:
 
     def state_dict(self):
         state = {'bestmetric':self.bestmetric,
+            'lastmetric': self.lastmetric,
             'path': self.path,
             'frequency':self.frequency,
             'overwrite':self.overwrite,
@@ -57,6 +60,7 @@ class SessionSaver:
 
     def load_state_dict(self, state):
         self.bestmetric = state['bestmetric']
+        self.lastmetric = state['lastmetric']
         self.path = state['path']
         self.frequency = state['frequency']
         self.overwrite = state['overwrite']
