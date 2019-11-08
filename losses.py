@@ -140,7 +140,7 @@ def _box_loss_mse(predict, target, mask, size_transform):
 def _box_loss_smoothL1(predict, target, mask, size_transform):
     """ Smooth L1 loss for bounding boxes
     """
-    loss = torch.masked_select(F.smooth_l1_loss(predict[:,1:3,...],
+    loss = torch.masked_select(F.smooth_l1_loss(predict[:,:2,...],
         target[:,1:3,...], reduction='none'), mask).sum()
     # Transform box sizes if requested
     if size_transform == 'log':
@@ -182,7 +182,7 @@ def _giou_loss(predict, target, mask):
     eleft = torch.min(tx-tw/2, px-pw/2)
     eright = torch.max(tx+tw/2, px+pw/2)
     etop = torch.min(ty-th/2, py-ph/2)
-    ebottom = torch.max(ty+th/2, pw+ph/2)
+    ebottom = torch.max(ty+th/2, py+ph/2)
     earea = (eright-eleft)*(ebottom-etop)
     # Calculate giou_loss
     uarea = tarea + parea - iarea
