@@ -26,8 +26,8 @@ class SessionSaver:
             return
         newmetric = defaultdict(float)
         newmetric['epoch'] = epoch
-        for metric, value in metrics.items():
-            newmetric[metric] = self.lastmetric[metric] + (value - self.lastmetric[metric]) * self.beta
+        for key, val in metrics.items():
+            newmetric[key] = self.lastmetric[key] + (val - self.lastmetric[key]) * self.beta
         self.lastmetric = newmetric
         if not self.bestonly:
             if self.overwrite:
@@ -36,7 +36,7 @@ class SessionSaver:
                 fname = f'{self.path}_{epoch}.tar'
             self.bestmetric = newmetric.copy()
             torch.save(session.state_dict(), fname)
-        elif self.metric not in self.bestmetric or newmetric[self.metric]*self.direction < self.bestmetric[metric]*self.direction:
+        elif self.metric not in self.bestmetric or newmetric[self.metric]*self.direction < self.bestmetric[self.metric]*self.direction:
             self.bestmetric = newmetric.copy()
             fname = self.path+'.tar'
             torch.save(session.state_dict(), fname)
