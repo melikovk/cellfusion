@@ -120,6 +120,16 @@ class ObjectDetectionLoss:
         self.localization_weight = state['localization_weight']
         self.normalize_per_anchor = state['normalize_per_anchor']
 
+class RetinaNetLoss(ObjectDetectionLoss):
+
+    def __call__(self, predict, target):
+        losses = [super().__call__(p, t) for p, t in zip(predict, target)]
+        loss = losses[0]
+        for fmap_loss in losses[1:]:
+            for key, val in fmap_loss:
+                loss[k] = loss[k] + val
+        return loss
+
 def _box_loss_mse(predict, target, mask, size_transform):
     """ Mean square root loss for bounding boxes
     """
@@ -217,11 +227,3 @@ def _focal_loss_star(predict, target, gamma=4.0, beta=0.0, reduction='none'):
     if reduction == 'mean':
         loss = loss.mean()
     return loss
-
-def yolo1_loss(predict, target, reduction='mean', localization_weight = 1):
-    return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'mse',
-        size_transform = 'none', localization_weight = localization_weight)
-
-def yolo2_loss(predict, target, reduction='mean', localization_weight = 1):
-    return object_detection_loss(predict, target, reduction=reduction, confidence_loss = 'crossentropy',
-        size_transform = 'log', localization_weight = localization_weight)
