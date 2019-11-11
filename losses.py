@@ -141,7 +141,7 @@ def _box_loss_smoothL1(predict, target, mask, size_transform):
     """ Smooth L1 loss for bounding boxes
     """
     loss = torch.masked_select(F.smooth_l1_loss(predict[:,:2,...],
-        target[:,1:3,...], reduction='none'), mask).sum()
+        target[:,:2,...], reduction='none'), mask).sum()
     # Transform box sizes if requested
     if size_transform == 'log':
         loss += F.smooth_l1_loss(torch.masked_select(predict[:,-2:,...], mask).log(),
