@@ -216,9 +216,14 @@ class TrainSession:
         if len(lrs) != len(self.optimizer.param_groups):
             raise ValueError(f"Number of the learning rates ({len(lrs)}) does not match "
                              f"number of the parameter groups ({len(self.optimizer.param_groups)})")
-        for group, lr in zip(self.optimizer.param_groups, lrs):
-            group['initial_lr'] = lr
-        self.scheduler.base_lrs = lrs
+        if self.scheduler:
+            for group, lr in zip(self.optimizer.param_groups, lrs):
+                group['initial_lr'] = lr
+            for i, group in enumerate(self.optimizer.param_groups):
+                self.scheduler.base_lrs[i] = group['initial_lr']
+        else:
+            for group, lr in zip(self.optimizer.param_groups, lrs):
+                group['lr'] = lr
 
     def state_dict(self):
         state = {'epoch': self.epoch,
