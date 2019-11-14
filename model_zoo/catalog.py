@@ -2,6 +2,7 @@ from .mobilenet_v2 import MobileNetV2
 from .mobilenet_v2gn import MobileNetV2gn
 from .resnet_v2 import ResNet50V2
 from .yolo_heads import YoloHead, YoloHeadSplit, YoloHeadSplitResBtlneck
+from .retina_head import RetinaHead
 from .vision_models import ObjectDetectionModel
 from image.datasets.utils import get_cell_anchors
 from .densenet import DenseNet121, DenseNet169, DenseNet201, DenseNet264
@@ -83,3 +84,11 @@ class DenseNetSplitHead(ObjectDetectionModel):
         else:
             raise ValueError('Incorrect value for densenet parameter')
         super().__init__(features_model(features_params['in_channels']), YoloHeadSplit(anchors = len(cell_anchors), **head_params), cell_anchors)
+
+class MobileNetRetinaHead(ObjectDetectionModel):
+    def __init__(self, anchors, features_params, head_params):
+        self.config = {'anchors': anchors,
+                       'features_params': features_params,
+                       'head_params': head_params}
+        cell_anchors = ANCHORS[anchors].copy()
+        super().__init__(MobileNetV2(**features_params), RetinaHead(anchors = len(cell_anchors), **head_params), cell_anchors)
