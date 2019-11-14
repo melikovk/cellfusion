@@ -20,7 +20,6 @@ class SessionSaver:
         self.beta = beta
         self.patience = patience if bestonly else 0
 
-
     def save(self, session, epoch, metrics):
         if epoch % self.frequency != 0:
             return
@@ -44,6 +43,10 @@ class SessionSaver:
             return False
         else:
             return True
+
+    def reset(self):
+        self.bestmetric = defaultdict(float)
+        self.lastmetric = defaultdict(float)
 
     def state_dict(self):
         state = {'bestmetric':self.bestmetric,

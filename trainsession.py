@@ -183,6 +183,12 @@ class TrainSession:
                     return
             pbar.close()
 
+    def reset_metrics(self, valid_data):
+        if self.saver is not None:
+            valid_loss, valid_acc = self.evaluate(valid_data)
+            self.saver.reset()
+            self.saver.save(self, self.epoch, {**valid_loss, **valid_acc})
+
     def update_lr(self, factor):
         """ Update initial_lr if scheduler is used or optimizer lr if not using
         scheduler. In both cases lr of all parameter groups is multiplied by the
