@@ -67,6 +67,21 @@ class Gamma:
         out = np.squeeze(out)
         return out if boxes is None else (out, boxes)
 
+class CorrectShading:
+    def __init__(self, sigma):
+        self.sigma = sigma
+
+    def __call__(self, img, boxes = None):
+        if len(img.shape)==2:
+            img = np.expand_dims(img, 0)
+        out = np.zeros_like(img)
+        for c in range(img.shape[0]):
+            out[c] = img[c] - np.min(img[c])
+            out[c] = out[c]/cv2.GaussianBlur(out[c], (0,0), self.sigma)
+            # out[c] = out[c]/cv2.blur(out[c], (self.sigma, self.sigma))
+        out = np.squeeze(out)
+        return out if boxes is None else (out, boxes)
+
 def Typecast(newtype):
     return lambda x: x.astype(newtype)
 
