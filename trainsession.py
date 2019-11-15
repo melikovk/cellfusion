@@ -322,8 +322,8 @@ def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale 
         if len(model.head.clsnums) > 0:
             clsscores = clsscores[keep_idx]
     boxes = boxes * np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
-    if upscale is not None:
-        boxes = boxes / upscale
+    # if upscale is not None:
+    #     boxes = boxes / upscale
     if len(model.head.clsnums) > 0:
         return boxes, scores, clsscores
     else:
