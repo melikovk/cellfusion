@@ -121,13 +121,12 @@ class ObjectDetectionLoss:
         self.normalize_per_anchor = state['normalize_per_anchor']
 
 class RetinaNetLoss(ObjectDetectionLoss):
-
     def __call__(self, predict, target):
-        losses = [super().__call__(p, t) for p, t in zip(predict, target)]
+        losses = [super(RetinaNetLoss, self).__call__(p, t) for p, t in zip(predict, target)]
         loss = losses[0]
         for fmap_loss in losses[1:]:
-            for key, val in fmap_loss:
-                loss[k] = loss[k] + val
+            for key, val in fmap_loss.items():
+                loss[key] = loss[key] + val
         return loss
 
 def _box_loss_mse(predict, target, mask, size_transform):

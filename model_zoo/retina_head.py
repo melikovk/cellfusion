@@ -23,14 +23,19 @@ class RetinaHead(nn.Module):
 
         super().__init__()
         self.class_and_box_subnet = YoloHeadSplitResBtlneck(in_features[0], **kwargs)
+        self.anchors = self.class_and_box_subnet.anchors
+        self.clsnums = self.class_and_box_subnet.clsnums
         self.upscale = nn.ModuleList([Upscale(in_features[0]) for _ in range(1, len(in_features))])
         self.lateral = nn.ModuleList([nn.Conv2d(in_features[i], in_features[0], kernel_size=1)
             for i in range(1, len(in_features))])
 
     def forward(self, x):
-        feature_maps = []
-        feature_maps.append(x[0])
-        for xi, up, lateral in zip(x[1:], self.upscale, self.lateral):
-            fmap = up(feature_maps[-1])+lateral(xi)
-            feature_maps.append(fmap)
-        return [self.class_and_box_subnet(fmap) for fmap in feature_maps]
+        if isinstance(x, list):
+            feature_maps = []
+            feature_maps.append(x[0])
+            for xi, up, lateral in zip(x[1:], self.upscale, self.lateral):
+                fmap = up(feature_maps[-1])+lateral(xi)
+                feature_maps.append(fmap)
+            return [self.class_and_box_subnet(fmap) for fmap in feature_maps]
+        else:
+            return [self.class_and_box_subnet(x)]

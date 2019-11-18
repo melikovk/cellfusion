@@ -9,6 +9,7 @@ from inspect import signature
 from image.datasets.utils import labels_to_boxes
 from functools import partial
 import math
+import numpy as np
 
 NUCLEUS = 0
 BKG = 1
@@ -35,7 +36,13 @@ class ObjectDetectionModel(nn.Module):
     def get_prediction(self, x, threshold = 0.5):
         """ Get prediction form network output
         """
-        return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
+        if isinstance(x, list):
+            fmap_lbls = [labels_to_boxes(fmap, grid_size = self.grid_size//(2**i),
+                cell_anchors = self.cell_anchors, threshold = threshold) for i, fmap in enumerate(x)]
+            return [[np.concatenate(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
+            # return fmap_lbls
+        else:
+            return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
 
     @torch.no_grad()
     def predict(self, x):
@@ -46,10 +53,16 @@ class ObjectDetectionModel(nn.Module):
     def get_targets(self, x):
         """ Get targets from labels Tensor
         """
-        if len(self.head.clsnums) > 0:
-            return [(box, cls) for box, score, cls in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
+        if isinstance(x, list):
+            fmap_lbls = [labels_to_boxes(fmap, grid_size = self.grid_size//(2**i),
+                cell_anchors = self.cell_anchors) for i, fmap in enumerate(x)]
+            out = [[np.concatenate(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
         else:
-            return [box for box, score in labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)]
+            out = labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)
+        if len(self.head.clsnums) > 0:
+            return [(box, cls) for box, score, cls in out]
+        else:
+            return [box for box, score in out]
 
 
 
