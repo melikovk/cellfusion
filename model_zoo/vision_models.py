@@ -50,6 +50,7 @@ class ObjectDetectionModel(nn.Module):
         """
         return self.get_prediction(self.forward(x))
 
+    @torch.no_grad()
     def get_targets(self, x):
         """ Get targets from labels Tensor
         """
