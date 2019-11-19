@@ -30,12 +30,18 @@ def get_filenames(datadir, channels, boxes = 'boxes/', suffix = ''):
     list of image files and box file
     suffix can be specified to use files train+suffix.txt and test+suffix.txt.
     """
+
+    def check_paths(fpaths):
+        return os.path.exists(fpaths[1]) and all(map(os.path.exists, fpaths[0]))
+
     with open(datadir+'train'+suffix+'.txt') as f:
-        train_names = [([os.path.join(fdir, channel, fname+'.tif') for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
-                        for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines())]
+        train_names = list(filter(check_paths, (([os.path.join(fdir, channel, fname+'.tif')
+            for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
+            for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines()))))
     with open(datadir+'test'+suffix+'.txt') as f:
-        test_names = [([os.path.join(fdir, channel, fname+'.tif') for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
-                        for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines())]
+        test_names = list(filter(check_paths,(([os.path.join(fdir, channel, fname+'.tif')
+            for channel in channels], os.path.join(fdir, boxes, fname+'boxes.json'))
+            for fdir, fname in (os.path.split(fpath.strip()) for fpath in f.readlines()))))
     return train_names, test_names
 
 class TrainSession:
