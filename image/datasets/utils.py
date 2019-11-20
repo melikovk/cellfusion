@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import patches
 import json
 import math
+import torch
 
 NUCLEUS = 0
 BKG = 1
@@ -109,12 +110,12 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
         offx, offy = offset
     _, w, h = labels.shape
     # Create grid of all anchors
-    anchors_grid = get_grid_anchors(cell_anchors, w, h).reshape((4,-1))
+    anchors_grid = torch.from_numpy(get_grid_anchors(cell_anchors, w, h).reshape((4,-1))).to(device=labels.device, dtype=labels.dtype)
     # Select booxes
     n_anchors = cell_anchors.shape[0]
-    box_labels = labels[-5*n_anchors:,...].cpu().numpy().reshape((5, -1))
+    box_labels = labels[-5*n_anchors:,...].reshape((5, -1))
     logit_threshold = math.log(threshold/(1-threshold))
-    idx = (box_labels[0] > logit_threshold).nonzero()[0]
+    idx = (box_labels[0] > logit_threshold)
     scores = box_labels[0, idx]
     boxes = box_labels[1:, idx]
     anchors_grid = anchors_grid[:, idx]
@@ -126,7 +127,7 @@ def labels_to_boxes(labels, grid_size, cell_anchors, threshold = 0.5, offset=(0,
     boxes[1] += offy
     # get class labels or class scores if needed
     if labels.shape[0] > 5*n_anchors:
-        boxcls = labels[:-5*n_anchors].cpu().numpy().reshape((-1, box_labels.shape[-1]))[:, idx].T
+        boxcls = labels[:-5*n_anchors].reshape((-1, box_labels.shape[-1]))[:, idx].T
         return boxes.T, scores, boxcls
     else:
         return boxes.T, scores

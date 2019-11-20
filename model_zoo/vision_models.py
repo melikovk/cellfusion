@@ -39,7 +39,7 @@ class ObjectDetectionModel(nn.Module):
         if isinstance(x, list):
             fmap_lbls = [labels_to_boxes(fmap, grid_size = self.grid_size//(2**i),
                 cell_anchors = self.cell_anchors, threshold = threshold) for i, fmap in enumerate(x)]
-            return [[np.concatenate(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
+            return [[torch.cat(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
             # return fmap_lbls
         else:
             return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
@@ -57,7 +57,7 @@ class ObjectDetectionModel(nn.Module):
         if isinstance(x, list):
             fmap_lbls = [labels_to_boxes(fmap, grid_size = self.grid_size//(2**i),
                 cell_anchors = self.cell_anchors) for i, fmap in enumerate(x)]
-            out = [[np.concatenate(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
+            out = [[torch.cat(lbls) for lbls in zip(*img_lbls)] for img_lbls in zip(*fmap_lbls)]
         else:
             out = labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors)
         if len(self.head.clsnums) > 0:
