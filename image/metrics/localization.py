@@ -268,72 +268,31 @@ def match_boxes(predict,target):
     Returns:
         (ious, p_idxs, t_idxs): tuple of Tensors or ndarrays
     """
-    p, t = _check_box_args(predict, target)
-    if isinstance(p, np.ndarray):
-        return match_boxes_numpy(p, t)
+    predict, target = _check_box_args(predict, target)
+    iou_matrix = iou(predict, target)
+    if torch.is_tensor(predict):
+        ious, idxs = iou_matrix.max(dim = -1)
+        ious = ious.cpu().numpy()
+        idxs = idxs.cpu().numpy()
     else:
-        return match_boxes_torch(p, t)
-
-def match_boxes_torch(predict, target):
-    """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
-    and indexes of matched boxes. Gready box assignement used.
-    Each predicted box can be assigned to only 1 target box (box with maximal IOU).
-    If multiple predicted boxes are assigned to the same target box
-    only the box with maximal prediction score is used (other prediction
-    boxes will have IOU of 0). The prediction boxes should be sorted
-    in ascending order of their prediction confidence score.
-    Parameters:
-        predict: (n,4) Tensor of box predictions
-        target: (n, 4) Tensor of box targets
-    Returns:
-        (ious, p_idxs, t_idxs): tuple of tensors
-    """
-    dev = predict.device
-    ious, p_idxs, t_idxs = match_boxes_numpy(predict.cpu().numpy(), target.cpu().numpy())
-    return torch.as_tensor(ious, device=dev), torch.as_tensor(p_idxs, device=dev), torch.as_tensor(t_idxs, device=dev)
-    # The pytorch code below is just too slow
-    # ious, idxs = iou_torch(predict, target).max(dim=-1)
-    # match_ious = torch.zeros(target.shape[0], device=dev)
-    # for v, i in zip(ious, idxs):
-    #     match_ious[i] = v
-    # # To replace the cycle above the command below does not work on GPU when there are duplicate indexes, but works on CPU
-    # # match_ious = match_ious.index_copy(0, idxs, ious)
-    # p_idxs = torch.zeros(target.shape[0], dtype=torch.long, device=dev)
-    # for v, i in enumerate(idxs):
-    #     p_idxs[i] = v
-    # # To replace the cycle above the command below does not work on GPU when there are duplicate indexes, but works on CPU
-    # # p_idxs = p_idxs.index_copy(0, idxs, torch.arange(predict.shape[0], dtype=torch.long, device=dev))
-    # t_idxs = torch.arange(target.shape[0], dtype=torch.long, device=dev)
-    # matched = match_ious.nonzero().squeeze()
-    # return match_ious[matched], p_idxs[matched], t_idxs[matched]
-
-def match_boxes_numpy(predict, target):
-    """Assigns predicted bounding boxes to ground truth boxes. Returns IOUs
-    and indexes of matched boxes. Gready box assignement used.
-    Each predicted box can be assigned to only 1 target box (box with maximal IOU).
-    If multiple predicted boxes are assigned to the same target box
-    only the box with maximal prediction score is used (other prediction
-    boxes will have IOU of 0). The prediction boxes should be sorted
-    in ascending order of their prediction confidence score.
-    Parameters:
-        predict: (n, 4) ndarray of box predictions
-        target: (n, 4) ndarray of box targets
-    Returns:
-        (ious, p_idxs, t_idxs): tuple of ndarrays
-    """
-    iou_matrix = iou_numpy(predict, target)
-    ious, idxs = iou_matrix.max(axis=-1), iou_matrix.argmax(axis=-1)
+        ious, idxs = iou_matrix.max(axis=-1), iou_matrix.argmax(axis=-1)
     match_ious = np.zeros(target.shape[0], dtype=ious.dtype)
-    # match_ious.put(idxs, ious) # This works instead of cycle below but not sure if it is guaranteed to work.
     for v, i in zip(ious, idxs):
         match_ious[i] = v
     p_idxs = np.zeros(target.shape[0], dtype=np.long)
-    # p_idxs.put(idxs, np.arange(predict.shape[0])) # This works instead of cycle below but not sure if it is guaranteed to work.
     for v, i in enumerate(idxs):
         p_idxs[i] = v
     t_idxs = np.arange(target.shape[0])
     matched = match_ious.nonzero()[0]
-    return match_ious[matched], p_idxs[matched], t_idxs[matched]
+    if torch.is_tensor(predict):
+        match_ious = torch.from_numpy(match_ious[matched]).to(predict.device)
+        p_idxs = torch.from_numpy(p_idxs[matched]).to(predict.device)
+        t_idxs = torch.from_numpy(t_idxs[matched]).to(predict.device)
+    else:
+        match_ious = match_ious[matched]
+        p_idxs = p_idxs[matched]
+        t_idxs = t_idxs[matched]
+    return match_ious, p_idxs, t_idxs
 
 def nms(boxes, scores, iou_threshold):
     """ Given an array of rectangular boxes and confidence scores filters out boxes
@@ -357,20 +316,17 @@ def nms(boxes, scores, iou_threshold):
     if torch.is_tensor(scores):
         scores = scores.cpu().numpy()
         ious = ious.cpu().numpy()
-    ious = ious.astype(np.bool)
     keep_mask = np.ones_like(scores, dtype = bool)
     order = np.flip(scores.argsort())
-    keep_idx = np.ones_like(scores, dtype=int)
-    n = 0
+    keep_idx = []
     for idx in order:
         if keep_mask[idx]:
             keep_mask[ious[idx]] = False
-            keep_idx[n] = idx
-            n += 1
+            keep_idx.append(idx)
     if torch.is_tensor(boxes):
-        return torch.tensor(keep_idx[:n]).to(boxes.device)
+        return torch.tensor(keep_idx).to(boxes.device, dtype = torch.long)
     else:
-        return keep_idx[:n]
+        return np.array(keep_idx)
 
 def precision_recall_f1(predict, target, iou_thresholds, nms_threshold = 0.8):
     """ Calculates precision, recall and F1 score on a batch of predictions.
@@ -437,26 +393,26 @@ class PrecisionRecallF1MeanIOU:
             predict, target = [predict], [target]
         counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
         ious = []
-        for i in range(len(predict)):
-            pboxes, pscores = predict[i]
-            tboxes = target[i]
+        for img_idx in range(len(predict)):
+            pboxes, pscores = predict[img_idx]
+            tboxes = target[img_idx]
             tboxes = tboxes[nms(tboxes, torch.ones(tboxes.shape[0]),.95)]
             pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
                 ious.append(match_ious)
-                for i, thresh in enumerate(self.iou_thresholds):
+                for t_idx, thresh in enumerate(self.iou_thresholds):
                     tp = (match_ious > thresh).sum().item()
                     fp = pboxes.shape[0] - tp
                     fn = tboxes.shape[0] - tp
-                    counts[i] += [tp, fp, fn]
+                    counts[t_idx] += [tp, fp, fn]
             else:
                 ious.append(torch.tensor([]).to(pboxes.device))
-                for i, thresh in enumerate(self.iou_thresholds):
-                    counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
+                for t_idx, thresh in enumerate(self.iou_thresholds):
+                    counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
         results = {}
-        for i, thresh in enumerate(self.iou_thresholds):
-            tp, fp, fn = counts[i]
+        for t_idx, thresh in enumerate(self.iou_thresholds):
+            tp, fp, fn = counts[t_idx]
             results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
             results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
             results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
@@ -489,45 +445,41 @@ class PrecisionRecallF1ClassF1MeanIOU:
         counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
         cls_counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
         ious = []
-        for i in range(len(predict)):
-            pboxes, pscores, pclsscores = predict[i]
-            # pboxes, pscores = predict[i]
-            # pclsscores = np.random.random((pscores.shape[0], 2))
+        for img_idx in range(len(predict)):
+            pboxes, pscores, pclsscores = predict[img_idx]
             pclslbl = torch.argmax(pclsscores, axis=1)
-            tboxes, tclslbl = target[i]
+            tboxes, tclslbl = target[img_idx]
             tidxs = nms(tboxes, torch.ones(tboxes.shape[0]),.95)
             tboxes = tboxes[tidxs]
             tclslbl = tclslbl[tidxs]
             pidxs = nms(pboxes, pscores, self.nms_threshold)
             pboxes = pboxes[pidxs]
             pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
-            # print(pclslbl.shape, tclslbl.shape, pboxes.shape, tboxes.shape)
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
                 ious.append(match_ious)
-                for i, thresh in enumerate(self.iou_thresholds):
+                for t_idx, thresh in enumerate(self.iou_thresholds):
                     match_idxs = match_ious > thresh
                     tp = match_idxs.sum().item()
                     fp = pboxes.shape[0] - tp
                     fn = tboxes.shape[0] - tp
-                    counts[i] += [tp, fp, fn]
+                    counts[t_idx] += [tp, fp, fn]
                     cls_tp = (pclslbl[p_idxs[match_idxs]] == tclslbl[t_idxs[match_idxs]]).sum().item()
                     cls_fp = pboxes.shape[0] - cls_tp
                     cls_fn = tboxes.shape[0] - cls_tp
-                    # print(cls_tp, cls_fp, cls_fn)
-                    cls_counts[i] = [cls_tp, cls_fp, cls_fn]
+                    cls_counts[t_idx] = [cls_tp, cls_fp, cls_fn]
             else:
                 ious.append(torch.tensor([]).to(pboxes.device))
-                for i, thresh in enumerate(self.iou_thresholds):
-                    counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
-                    cls_counts[i] += [0, pboxes.shape[0], tboxes.shape[0]]
+                for t_idx, thresh in enumerate(self.iou_thresholds):
+                    counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
+                    cls_counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
         results = {}
-        for i, thresh in enumerate(self.iou_thresholds):
-            tp, fp, fn = counts[i]
+        for t_idx, thresh in enumerate(self.iou_thresholds):
+            tp, fp, fn = counts[t_idx]
             results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
             results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
             results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
-            cls_tp, cls_fp, cls_fn = cls_counts[i]
+            cls_tp, cls_fp, cls_fn = cls_counts[t_idx]
             results[f"ClassF1@IOU {thresh:{0}.{2}}"] = 2*cls_tp/(2*cls_tp+cls_fp+cls_fn) if 2*cls_tp+cls_fp+cls_fn !=0 else 0
         ious = torch.cat(ious)
         results["meanIOU"] = ious.mean().item() if len(ious) > 0 else 0
