@@ -5,11 +5,13 @@ from model_zoo.mobilenet_v2 import Block as ResidualBottleneckBlock
 
 class NormTanh(nn.Module):
     """ Tanh normalized to be within min_val and max_mal """
+
     def __init__(self, min_val=0., max_val=1.):
         super().__init__()
-        self.min_val = min_val
-        self.max_val = max_val
-        assert self.max_val > self.min_val
+        assert max_val > min_val
+        self.register_buffer('min_val', torch.tensor(min_val))
+        self.register_buffer('max_val', torch.tensor(max_val))
+
 
     def forward(self, x):
         return (torch.tanh(x)+self.min_val+1)*self.max_val/(self.min_val+2)
