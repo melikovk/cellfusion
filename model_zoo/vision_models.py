@@ -45,10 +45,10 @@ class ObjectDetectionModel(nn.Module):
             return labels_to_boxes(x, grid_size = self.grid_size, cell_anchors = self.cell_anchors, threshold = threshold)
 
     @torch.no_grad()
-    def predict(self, x):
+    def predict(self, x, threshold=0.5):
         """ Get prediction from image or batch of images
         """
-        return self.get_prediction(self.forward(x))
+        return self.get_prediction(self.forward(x), threshold)
 
     @torch.no_grad()
     def get_targets(self, x):
