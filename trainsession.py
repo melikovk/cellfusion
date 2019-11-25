@@ -301,7 +301,7 @@ def map_ids_to_names(param_groups, model):
         g['params'] = [reverse_dict[id] for id in g['params']]
     return new_groups
 
-def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale = 1):
+def predict_boxes(model, imgnames, transforms=None, nms_threshold=1.0, p_threshold = 0.5, upscale = 1):
     """ Given model and name of image file predict boxes
     """
     model.eval()
@@ -320,14 +320,14 @@ def predict_boxes(model, imgnames, transforms=None, nms_threshold=None, upscale 
     if len(model.head.clsnums) > 0:
         boxes, scores, clsscores = model.predict(input)[0]
     else:
-        boxes, scores = model.predict(input)[0]
-    if nms_threshold is not None:
+        boxes, scores = model.predict(input, p_threshold)[0]
+    if nms_threshold < 1.0:
         keep_idx = nms(boxes, scores, nms_threshold)
         boxes = boxes[keep_idx]
         scores = scores[keep_idx]
         if len(model.head.clsnums) > 0:
             clsscores = clsscores[keep_idx]
-    boxes = boxes * np.array([wfactor, hfactor, wfactor, hfactor]).reshape(1,4)
+    boxes = boxes * torch.tensor([wfactor, hfactor, wfactor, hfactor]).reshape(1,4).to(device)
     # if upscale is not None:
     #     boxes = boxes / upscale
     if len(model.head.clsnums) > 0:
@@ -340,8 +340,14 @@ def evaluate_model(model, fnames, eval_func, clsname=None, **kwargs):
     predictions = []
     targets = []
     for imgnames, boxname in fnames:
-        p = predict_boxes(model, imgnames, **kwargs)
+        print(boxname)
+        # p = predict_boxes(model, imgnames, **kwargs)
+        p = [arr.cpu() for arr in predict_boxes(model, imgnames, **kwargs)]
         predictions.append(p)
         t = get_boxes_from_json(boxname, clsname)
+        if isinstance(t, np.ndarray):
+            t = torch.from_numpy(t).to(device=p[0].device, dtype = p[0].dtype)
+        else:
+            [torch.from_numpy(arr).to(device=p[0].device, dtype = p[0].dtype) for arr in t]
         targets.append(t)
     return eval_func(predictions, targets)
