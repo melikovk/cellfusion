@@ -396,18 +396,18 @@ class PrecisionRecallF1MeanIOU:
         for img_idx in range(len(predict)):
             pboxes, pscores = predict[img_idx]
             tboxes = target[img_idx]
-            tboxes = tboxes[nms(tboxes, torch.ones(tboxes.shape[0]),.95)]
-            pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold)]
+            tboxes = tboxes[nms(tboxes, torch.ones(tboxes.shape[0]),.95).flip((0,))]
+            pboxes = pboxes[nms(pboxes, pscores, self.nms_threshold).flip((0,))]
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
-                ious.append(match_ious)
+                ious.append(match_ious.cpu().numpy())
                 for t_idx, thresh in enumerate(self.iou_thresholds):
                     tp = (match_ious > thresh).sum().item()
                     fp = pboxes.shape[0] - tp
                     fn = tboxes.shape[0] - tp
                     counts[t_idx] += [tp, fp, fn]
             else:
-                ious.append(torch.tensor([]).to(pboxes.device))
+                ious.append(np.array([]))
                 for t_idx, thresh in enumerate(self.iou_thresholds):
                     counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
         results = {}
@@ -416,8 +416,8 @@ class PrecisionRecallF1MeanIOU:
             results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
             results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
             results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
-        ious = torch.cat(ious)
-        results["meanIOU"] = ious.mean().item() if len(ious) > 0 else 0
+        ious = np.concatenate(ious)
+        results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
         return results
 
     def state_dict(self):
@@ -449,15 +449,15 @@ class PrecisionRecallF1ClassF1MeanIOU:
             pboxes, pscores, pclsscores = predict[img_idx]
             pclslbl = torch.argmax(pclsscores, axis=1)
             tboxes, tclslbl = target[img_idx]
-            tidxs = nms(tboxes, torch.ones(tboxes.shape[0]),.95)
+            tidxs = nms(tboxes, torch.ones(tboxes.shape[0]),.95).flip((0,))
             tboxes = tboxes[tidxs]
             tclslbl = tclslbl[tidxs]
-            pidxs = nms(pboxes, pscores, self.nms_threshold)
+            pidxs = nms(pboxes, pscores, self.nms_threshold).flip((0,))
             pboxes = pboxes[pidxs]
             pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
                 match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
-                ious.append(match_ious)
+                ious.append(match_ious.cpu().numpy())
                 for t_idx, thresh in enumerate(self.iou_thresholds):
                     match_idxs = match_ious > thresh
                     tp = match_idxs.sum().item()
@@ -469,7 +469,7 @@ class PrecisionRecallF1ClassF1MeanIOU:
                     cls_fn = tboxes.shape[0] - cls_tp
                     cls_counts[t_idx] = [cls_tp, cls_fp, cls_fn]
             else:
-                ious.append(torch.tensor([]).to(pboxes.device))
+                ious.append(np.array([]))
                 for t_idx, thresh in enumerate(self.iou_thresholds):
                     counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
                     cls_counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
@@ -481,8 +481,8 @@ class PrecisionRecallF1ClassF1MeanIOU:
             results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
             cls_tp, cls_fp, cls_fn = cls_counts[t_idx]
             results[f"ClassF1@IOU {thresh:{0}.{2}}"] = 2*cls_tp/(2*cls_tp+cls_fp+cls_fn) if 2*cls_tp+cls_fp+cls_fn !=0 else 0
-        ious = torch.cat(ious)
-        results["meanIOU"] = ious.mean().item() if len(ious) > 0 else 0
+        ious = np.concatenate(ious)
+        results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
         return results
 
     def state_dict(self):
