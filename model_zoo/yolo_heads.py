@@ -113,11 +113,11 @@ class YoloHead(nn.Module):
         self.anchors = anchors
         self.register_buffer('eps', torch.tensor(eps))
         if coordinate_transform == 'tanh':
-            self.coord_func = NormTanh()
+            self.coord_func = NormTanh(min_val=-1.0, max_val=2.0)
         elif coordinate_transform == 'sigmoid':
             self.coord_func = nn.Sigmoid()
         else:
-            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
+            self.coord_func = nn.Hardtanh(min_val=-1.0, max_val=2.0)
         self.conv_block = ConvolutionalBlock(in_features, hidden_features, hidden_kernels, activation, bn_args, act_args)
         self.out = Conv2d(hidden_features[-1], anchors*(5+sum(clsnums)), 1)
         # Initialize weights
@@ -158,11 +158,11 @@ class YoloHeadSplit(nn.Module):
         self.register_buffer('eps', torch.tensor(eps))
         self.anchors = anchors
         if coordinate_transform == 'tanh':
-            self.coord_func = NormTanh()
+            self.coord_func = NormTanh(min_val=-1.0, max_val=2.0)
         elif coordinate_transform == 'sigmoid':
             self.coord_func = nn.Sigmoid()
         else:
-            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
+            self.coord_func = nn.Hardtanh(min_val=-1.0, max_val=2.0)
         self.obj_cls_subnet = ConvolutionalBlock(in_features, hidden_features, hidden_kernels, activation, bn_args, act_args)
         self.obj_cls_out = nn.Conv2d(hidden_features, self.anchors*(1+sum(clsnums)), 1)
         self.box_subnet = ConvolutionalBlock(in_features, hidden_features, hidden_kernels, activation, bn_args, act_args)
@@ -191,11 +191,11 @@ class YoloHeadSplitResBtlneck(nn.Module):
         self.anchors = anchors
         self.clsnums = clsnums
         if coordinate_transform == 'tanh':
-            self.coord_func = NormTanh()
+            self.coord_func = NormTanh(min_val=-1.0, max_val=2.0)
         elif coordinate_transform == 'sigmoid':
             self.coord_func = nn.Sigmoid()
         else:
-            self.coord_func = nn.Hardtanh(min_val=0.0, max_val=1.0)
+            self.coord_func = nn.Hardtanh(min_val=-1.0, max_val=2.0)
         self.obj_cls_subnet = ResidualBottleneckBlock(in_features, out_channels=hidden_features,
             repeats=repeats, stride=1, expansion=expansion, bn_args = bn_args)
         self.obj_cls_out = nn.Conv2d(hidden_features, self.anchors*(1+sum(clsnums)), 1)
