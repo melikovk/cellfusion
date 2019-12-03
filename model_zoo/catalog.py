@@ -9,8 +9,9 @@ from .densenet import DenseNet121, DenseNet169, DenseNet201, DenseNet264
 import numpy as np
 
 ANCHORS = {'anchors0': get_cell_anchors(scales=[1], anchors=[]),
-           'anchors1': get_cell_anchors(scales = 2**(np.arange(0,4)/3), anchors = [(-0.5,-0.5,1.0),(0.0 ,0.5, 3/2), (0.5, 0.0 ,2/3)]),
-           'anchors2': get_cell_anchors(scales = [1.5], anchors = [(-0.5,-0.5,1.0),(0.0 ,0.5, 3/2), (0.5, 0.0 ,2/3)])}
+           'anchors1': get_cell_anchors(scales = 2**(np.arange(0,4)/3), anchors = [(0.5,0.5,1.0),(0.0 ,0.5, 2.), (0.5, 0.0 , .5)]),
+           'anchors2': get_cell_anchors(scales = [1.5], anchors = [(-0.5,-0.5,1.0),(0.0 ,0.5, 3/2), (0.5, 0.0 ,2/3)]),
+           'anchors3': get_cell_anchors(scales = 2**(np.arange(0,3)/2), anchors = [(-0.5,-0.5,1.0),(0.0 ,0.5, 3/2), (0.5, 0.0 ,2/3),(-0.5 ,0.0, 5/3), (0.0, -0.5 ,3/5)]),}
 
 class MobileNetJointHead(ObjectDetectionModel):
     """ Object detection model with feature MobileNetv2 feature extractor
