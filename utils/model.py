@@ -65,6 +65,58 @@ def predict_boxes(model, imgnames, transforms=None, nms_threshold=1.0, p_thresho
     else:
         return boxes, scores
 
+def predict_boxes2(model, imgnames, transforms=None, nms_threshold=1.0, p_threshold = 0.5, upscale = 1):
+    """ Given model and name of image file predict boxes
+    """
+    model.eval()
+    img  = np.stack([np.asarray(Image.open(imgname)).T.astype(np.float32) for imgname in imgnames])
+    w, h = img.shape[-2:]
+    grid_size = model.grid_size
+    cls_num = len(model.head.clsnums)
+    w1 = (int(w*upscale)//grid_size)*grid_size
+    h1 = (int(h*upscale)//grid_size)*grid_size
+    wfactor = w / w1
+    hfactor = h / h1
+    img = np.stack([cv2.resize(channel, dsize=(h1,w1), interpolation=cv2.INTER_CUBIC) for channel in img])
+    device = next(model.parameters()).device
+    # Get unshifted predictions
+    if transforms is None:
+        input = torch.from_numpy(img).reshape(1, img.shape[0], w1, h1).to(device)
+    else:
+        input = torch.from_numpy(transforms(img)).reshape(1, img.shape[0], w1, h1).to(device)
+    if cls_num > 0:
+        boxes, scores, clsscores = model.predict(input)[0]
+    else:
+        boxes, scores = model.predict(input, p_threshold)[0]
+    # Get shifted predictions
+    if transforms is None:
+        input = torch.from_numpy(img[:,grid_size//2:-grid_size//2,grid_size//2:-grid_size//2]).reshape(1, img.shape[0], w1-grid_size, h1-grid_size).to(device)
+    else:
+        input = torch.from_numpy(transforms(img[:,grid_size//2:-grid_size//2,grid_size//2:-grid_size//2])).reshape(1, img.shape[0], w1-grid_size, h1-grid_size).to(device)
+    if cls_num > 0:
+        boxes1, scores1, clsscores1 = model.predict(input)[0]
+    else:
+        boxes1, scores1 = model.predict(input, p_threshold)[0]
+    boxes1 = boxes1 + torch.tensor([grid_size/2, grid_size/2,0.0,0.0]).reshape(1,4).to(device)
+    # Merge Predictions
+    boxes = torch.cat([boxes, boxes1])
+    scores = torch.cat([scores, scores1])
+    if cls_num > 0:
+        clsscores = torch.cat([clsscores,clsscores1])
+    # Run nms
+    if nms_threshold < 1.0:
+        keep_idx = nms(boxes, scores, nms_threshold)
+        boxes = boxes[keep_idx]
+        scores = scores[keep_idx]
+        if len(model.head.clsnums) > 0:
+            clsscores = clsscores[keep_idx]
+    # Rescale back boxes
+    boxes = boxes * torch.tensor([wfactor, hfactor, wfactor, hfactor]).reshape(1,4).to(device)
+    if len(model.head.clsnums) > 0:
+        return boxes, scores, clsscores
+    else:
+        return boxes, scores
+
 def evaluate_model(model, fnames, eval_func, clsname=None, transfer_to_cpu=False, **kwargs):
     """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
     predictions = []
@@ -73,6 +125,25 @@ def evaluate_model(model, fnames, eval_func, clsname=None, transfer_to_cpu=False
         print(boxname)
         # p = predict_boxes(model, imgnames, **kwargs)
         p = predict_boxes(model, imgnames, **kwargs)
+        if transfer_to_cpu:
+            p = [arr.cpu() for arr in p]
+        predictions.append(p)
+        t = get_boxes_from_json(boxname, clsname)
+        if isinstance(t, np.ndarray):
+            t = torch.from_numpy(t).to(device=p[0].device, dtype = p[0].dtype)
+        else:
+            [torch.from_numpy(arr).to(device=p[0].device, dtype = p[0].dtype) for arr in t]
+        targets.append(t)
+    return eval_func(predictions, targets)
+
+def evaluate_model2(model, fnames, eval_func, clsname=None, transfer_to_cpu=False, **kwargs):
+    """ Evaluate function on a set of files. Expects list of tuples (imgname, boxname)"""
+    predictions = []
+    targets = []
+    for imgnames, boxname in fnames:
+        print(boxname)
+        # p = predict_boxes(model, imgnames, **kwargs)
+        p = predict_boxes2(model, imgnames, **kwargs)
         if transfer_to_cpu:
             p = [arr.cpu() for arr in p]
         predictions.append(p)
