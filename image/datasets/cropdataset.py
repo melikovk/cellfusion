@@ -49,8 +49,7 @@ class CropDataset(Dataset):
             self._boxcls = None
         else:
             self._boxes_orig, self._boxcls = get_boxes_from_json(lblname, clsname)
-        self._img, self._boxes = self._img_orig.astype(np.float32), self._boxes_orig.astype(np.float32)
-        self._xys = self._init_coordinates()
+        self.reset()
 
     def _data_augmentation(self):
         """ Apply random transformations to an image
