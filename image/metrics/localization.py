@@ -447,15 +447,15 @@ class PrecisionRecallF1ClassF1MeanIOU:
         ious = []
         for img_idx in range(len(predict)):
             pboxes, pscores, pclsscores = predict[img_idx]
-            pclslbl = torch.argmax(pclsscores, axis=1)
             tboxes, tclslbl = target[img_idx]
             tidxs = nms(tboxes, torch.ones(tboxes.shape[0]),.95).flip((0,))
             tboxes = tboxes[tidxs]
-            tclslbl = tclslbl[tidxs]
             pidxs = nms(pboxes, pscores, self.nms_threshold).flip((0,))
             pboxes = pboxes[pidxs]
-            pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
             if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
+                tclslbl = tclslbl[tidxs]
+                pclslbl = torch.argmax(pclsscores, axis=1)
+                pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
                 match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
                 ious.append(match_ious.cpu().numpy())
                 for t_idx, thresh in enumerate(self.iou_thresholds):
