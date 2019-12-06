@@ -4,6 +4,7 @@ import os
 from PIL import Image
 import cv2
 from image.datasets.utils import get_cell_anchors, get_boxes_from_json
+from image.metrics.localization import nms
 
 def get_filenames(datadir, channels, boxes = 'boxes/', suffix = ''):
     """ This function takes name of a directory, list of channel names and name
