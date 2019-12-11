@@ -205,7 +205,7 @@ class YoloHeadSplitResBtlneck(nn.Module):
         # Initialize Weights
         init.kaiming_uniform_(self.obj_cls_out.weight, mode='fan_in', nonlinearity='relu')
         init.kaiming_uniform_(self.box_out.weight, mode='fan_in', nonlinearity='relu')
-        init.zeros_(self.obj_cls_out.bias)
+        init.constant_(self.obj_cls_out.bias, -7.)
         init.zeros_(self.box_out.bias)
 
     def forward(self,x):
