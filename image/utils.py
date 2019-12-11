@@ -15,6 +15,7 @@ from torch.utils.data import Dataset
 from .metrics.localization import iou
 import xml.etree.ElementTree as ET
 import tifffile as tif
+import czifile as czi
 
 NUCLEUS = 0
 BKG = 1
@@ -244,7 +245,9 @@ def mark_fused_boxes(markers, boxes):
 CHANNELS_TO_DIRNAMES = {'DAPI1%': 'nuclei', 'DAPI5%': 'nuclei', 'DAPI10%': 'nuclei',
                         'DAPI20%': 'nuclei','DAPI50%': 'nuclei','DAPI90%': 'nuclei',
                         'Trans1%': 'phase', 'Trans5%': 'phase', 'Trans10%': 'phase',
-                        'Trans20%': 'phase','Trans50%': 'phase','Trans90%': 'phase'}
+                        'Trans20%': 'phase','Trans50%': 'phase','Trans90%': 'phase',
+                        'DAPI': 'nuclei', 'AF568': 'red', 'AF488': 'green',
+                        'T-PMT': 'phase'}
 
 def split_imagej_channels(imgpath, filedir, index, channel_to_dirname = CHANNELS_TO_DIRNAMES):
      with tif.TiffFile(imgpath) as implus:
@@ -252,6 +255,27 @@ def split_imagej_channels(imgpath, filedir, index, channel_to_dirname = CHANNELS
         img = implus.asarray()
         channels = implus.micromanager_metadata['Summary']['ChNames']
         pixel_size = implus.micromanager_metadata['Summary']['PixelSize_um']
+        for i, chname in enumerate(channels):
+            try:
+                fpath = os.path.join(filedir, channel_to_dirname[chname], fname)
+            except KeyError:
+                print(f"Unexpected channel {chname} in image {imgpath}")
+                return
+            metadata = {'filename':imgpath, 'pixel_size':pixel_size}
+            tif.imwrite(fpath, img[i], imagej=True, metadata=metadata)
+
+def split_czi_channels(imgpath, filedir, channel_to_dirname = CHANNELS_TO_DIRNAMES):
+     with czi.CziFile(imgpath) as implus:
+        fname = os.path.basename(imgpath)[:-4]+'.tif'
+        img = implus.asarray().squeeze()
+        metadata = ET.fromstring(implus.metadata())
+        channels = ['']*img.shape[0]
+        for chnl in metadata.iterfind('.//Channel[@Id]'):
+            channels[int(chnl.get('Id')[-1:])]=chnl.get('Name').split('-T')[0]
+        pixel_size = 0
+        for child in metadata.find(".//Distance[Value][@Id]"):
+            if child.tag == 'Value':
+                pixel_size = float(child.text)*1e6
         for i, chname in enumerate(channels):
             try:
                 fpath = os.path.join(filedir, channel_to_dirname[chname], fname)
