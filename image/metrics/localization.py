@@ -493,3 +493,71 @@ class PrecisionRecallF1ClassF1MeanIOU:
     def load_state_dict(self, state):
         self.iou_thresholds = state['iou_thresholds']
         self.nms_threshold = state['nms_threshold']
+
+class PrecisionRecallF1BalancedClassAccuracyMeanIOU:
+    """ Balanced class accuracy is calculated as macro-average of per class recall
+    """
+    def __init__(self, iou_thresholds=[0.5,0.8,.95], nms_threshold = 0.8):
+        self.iou_thresholds = iou_thresholds
+        self.nms_threshold = nms_threshold
+
+    @torch.no_grad()
+    def __call__(self, predict, target):
+        if isinstance(predict, list):
+            assert isinstance(target, list) and len(predict) == len(target), \
+                "If predict and target are lists they should have same length"
+        else:
+            predict, target = [predict], [target]
+        counts = np.zeros((len(self.iou_thresholds), 3), dtype=np.int)
+        cls_accuracy = np.zeros(len(self.iou_thresholds), dtype=np.int)
+        ious = []
+        img_count = 0
+        for img_idx in range(len(predict)):
+            pboxes, pscores, pclsscores = predict[img_idx]
+            tboxes, tclslbl = target[img_idx]
+            tidxs = nms(tboxes, torch.ones(tboxes.shape[0]),.95).flip((0,))
+            tboxes = tboxes[tidxs]
+            pidxs = nms(pboxes, pscores, self.nms_threshold).flip((0,))
+            pboxes = pboxes[pidxs]
+            if pboxes.shape[0] > 0 and tboxes.shape[0] > 0:
+                tclslbl = tclslbl[tidxs]
+                cls_lbls, cls_counts = torch.unique(tclslbl, return_counts=True)
+                cls_recalls = np.zeros(cls_lbls.shape[0])
+                pclslbl = torch.argmax(pclsscores, axis=1)
+                pclslbl = pclslbl[pidxs].reshape((-1,1)) # WARNING
+                match_ious, p_idxs, t_idxs = match_boxes(pboxes, tboxes)
+                ious.append(match_ious.cpu().numpy())
+                for t_idx, thresh in enumerate(self.iou_thresholds):
+                    match_idxs = match_ious > thresh
+                    tp = match_idxs.sum().item()
+                    fp = pboxes.shape[0] - tp
+                    fn = tboxes.shape[0] - tp
+                    counts[t_idx] += [tp, fp, fn]
+                    for cls_idx in range(cls_lbls.shape[0]):
+                        cls_recalls[cls_idx] = (pclslbl[p_idxs[match_idxs]] == cls_lbls[cls_idx]).sum().item() / cls_counts[cls_idx].item()
+                    cls_accuracy[t_idx] += cls_recalls.mean()
+            else:
+                ious.append(np.array([]))
+                img_count +=1
+                for t_idx, thresh in enumerate(self.iou_thresholds):
+                    counts[t_idx] += [0, pboxes.shape[0], tboxes.shape[0]]
+        results = {}
+        for t_idx, thresh in enumerate(self.iou_thresholds):
+            tp, fp, fn = counts[t_idx]
+            results[f"Precision@IOU {thresh:{0}.{2}}"] = tp/(tp+fp) if tp+fp !=0 else 0
+            results[f"Recall@IOU {thresh:{0}.{2}}"] = tp/(tp+fn) if tp+fn !=0 else 0
+            results[f"F1@IOU {thresh:{0}.{2}}"] = 2*tp/(2*tp+fp+fn) if 2*tp+fp+fn !=0 else 0
+            cls_tp, cls_fp, cls_fn = cls_counts[t_idx]
+            results[f"ClassAccuracy@IOU {thresh:{0}.{2}}"] = cls_accuracy[t_idx]/img_count if img_count != 0 else 0
+        ious = np.concatenate(ious)
+        results["meanIOU"] = ious.mean() if len(ious) > 0 else 0
+        return results
+
+    def state_dict(self):
+        state = {'iou_thresholds': self.iou_thresholds,
+        'nms_threshold': self.nms_threshold}
+        return state
+
+    def load_state_dict(self, state):
+        self.iou_thresholds = state['iou_thresholds']
+        self.nms_threshold = state['nms_threshold']
